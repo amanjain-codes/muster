@@ -13,7 +13,7 @@ from pathlib import Path
 PATH = Path(os.environ.get("MUSTER_CONFIG", str(Path.home() / ".config" / "muster" / "config.toml")))
 
 DEFAULTS = {
-    "github": {"orgs": [], "review_repos": []},
+    "github": {"orgs": [], "review_repos": [], "review_max_age_hours": 0},  # 0 = no age limit
     "workspace": {"code_root": "~/Projects", "worktree_glob": "{code_root}/*.worktrees/*",
                   "new_agent": "direct"},  # "direct": dash starts claude; "autoclaude": a herdr plugin does
     "slack": {"share_channel_id": "", "share_channel_name": "", "share_mention": ""},
@@ -60,6 +60,7 @@ ENV_PATH = PATH.parent / ".env"
 ENV_KEYS = {
     "MUSTER_GITHUB_ORGS": ("github", "orgs"),            # comma-separated
     "MUSTER_REVIEW_REPOS": ("github", "review_repos"),   # comma-separated owner/name
+    "MUSTER_REVIEW_MAX_AGE_HOURS": ("github", "review_max_age_hours"),
     "MUSTER_CODE_ROOT": ("workspace", "code_root"),
     "MUSTER_WORKTREE_GLOB": ("workspace", "worktree_glob"),
     "MUSTER_NEW_AGENT": ("workspace", "new_agent"),

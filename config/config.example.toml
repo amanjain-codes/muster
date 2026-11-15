@@ -6,6 +6,8 @@
 orgs = ["your-github-org"]
 # Repos whose PRs waiting on your review show in REVIEWS (owner/name). Empty = no REVIEWS section.
 review_repos = []
+# Show only reviews requested within this many hours (0 = all).
+review_max_age_hours = 0
 
 [workspace]
 # Where your repos live. New ticket agents (n in JIRA) start here.

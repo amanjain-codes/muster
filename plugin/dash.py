@@ -34,6 +34,7 @@ from notes import FAILED, KEY_RE, brief_path, review_head, review_path  # noqa: 
 
 ORGS = CFG["github"]["orgs"]
 REVIEW_REPOS = CFG["github"]["review_repos"]
+REVIEW_MAX_AGE = int(CFG["github"]["review_max_age_hours"] or 0) * 3600  # seconds; 0 = no limit
 CCUSAGE = ["bunx", "ccusage@20.0.47"] if shutil.which("bunx") else ["npx", "-y", "ccusage@20.0.47"]
 
 # herdr may start this pane without the login shell's PATH.
@@ -303,7 +304,7 @@ REVIEW_QUERY = """
 query($q: String!) {
   search(query: $q, type: ISSUE, first: 30) {
     nodes { ... on PullRequest {
-      number title url isDraft headRefOid author { login }
+      number title url isDraft headRefOid createdAt author { login }
       repository { nameWithOwner viewerDefaultMergeMethod }
       timelineItems(itemTypes: [REVIEW_REQUESTED_EVENT], last: 1) { nodes { ... on ReviewRequestedEvent { createdAt } } }
       commits(last: 1) { nodes { commit { statusCheckRollup {
@@ -331,12 +332,20 @@ def load_reviews() -> list[dict]:
             continue
         ok, fail, total, first_fail = check_summary(pr)
         ev = pr["timelineItems"]["nodes"]
-        asked = dt.datetime.fromisoformat(ev[0]["createdAt"].replace("Z", "+00:00")).timestamp() if ev else None
+        # When the review was asked for; a PR without that event (rare) counts from when it was opened.
+        asked = dt.datetime.fromisoformat((ev[0] if ev else pr)["createdAt"].replace("Z", "+00:00")).timestamp()
         out.append(dict(kind="review", number=pr["number"], title=pr["title"], url=pr["url"], draft=pr["isDraft"],
                         author=(pr.get("author") or {}).get("login", ""), repo=pr["repository"]["nameWithOwner"],
                         method=pr["repository"]["viewerDefaultMergeMethod"], asked=asked, head=pr["headRefOid"],
                         ok=ok, fail=fail, total=total, first_fail=first_fail))
-    return sorted(out, key=lambda p: p["asked"] or time.time())
+    return recent_reviews(out, REVIEW_MAX_AGE)
+
+
+def recent_reviews(prs: list[dict], max_age: int, now: float | None = None) -> list[dict]:
+    """Oldest request first; with max_age (seconds) only requests newer than that."""
+    now = now or time.time()
+    keep = [p for p in prs if not max_age or now - (p["asked"] or now) <= max_age]
+    return sorted(keep, key=lambda p: p["asked"] or now)
 
 
 def ci_label(p: dict) -> Text:
@@ -772,6 +781,8 @@ class Dash(App):
 
         if REVIEW_REPOS:
             names = ", ".join(r.split("/")[-1] for r in REVIEW_REPOS)
+            if REVIEW_MAX_AGE:
+                names += f" · last {REVIEW_MAX_AGE // 3600}h"
             section("REVIEWS", f"{len(self.reviews)} waiting on you · {names}" if "reviews" in self.updated else names)
             if not err_or_wait("reviews"):
                 if not self.reviews:

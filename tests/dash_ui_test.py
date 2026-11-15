@@ -110,6 +110,11 @@ async def main():
         select("slack_msg")
         expect("Slack mention hint", app.items[app.sel]["hints"], "o open the thread")
 
+        t0 = 1_000_000.0
+        aged = [pr(1, asked=t0 - 50 * 3600), pr(2, asked=t0 - 47 * 3600), pr(3, asked=t0 - 3600)]
+        expect("48h limit drops older requests, oldest first", [p["number"] for p in dash.recent_reviews(aged, 48 * 3600, t0)], [2, 3])
+        expect("no limit keeps all", len(dash.recent_reviews(aged, 0, t0)), 3)
+
         app.notes_started[str(dash.brief_path("ABC-2"))] = time.time()
         expect("a running brief shows as writing", app.note_state(dash.brief_path("ABC-2")), "writing")
         dash.brief_path("ABC-2").write_text(dash.FAILED + " boom\n")

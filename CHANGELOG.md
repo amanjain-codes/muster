@@ -2,6 +2,11 @@
 
 All notable changes to Muster. Versions follow [semantic versioning](https://semver.org): breaking changes bump the major, features the minor, fixes the patch.
 
+## 0.2.2 (2026-11-15)
+
+- `github.review_max_age_hours`: REVIEWS shows only requests made within that many hours (0 = all).
+- Installer copies plugin files only (a test run's `__pycache__` broke the install) and leaves `settings.json` untouched when nothing changed.
+
 ## 0.2.1 (2026-11-15)
 
 Security fixes from a review of 0.2.0:
