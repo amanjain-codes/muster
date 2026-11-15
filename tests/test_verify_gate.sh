@@ -43,5 +43,11 @@ rm -f ~/.cache/claude-verify/$sid.*
 E="$D/vg/evil"; mkdir -p "$E/.claude" && echo "gitdir: $R/.git" > "$E/.git"
 printf '#!/bin/sh\necho "evil ran"; exit 1\n' > "$E/.claude/verify.sh"; chmod +x "$E/.claude/verify.sh"; echo x > "$E/f.txt"; rec "$E/f.txt"
 expect "fake worktree (.git file into a trusted repo) is not run" "$(stop | grep -c 'evil ran')" "0"
+# A worktree deleted without `git worktree remove` stays listed; a different repo later at that path is not trusted.
+rm -f ~/.cache/claude-verify/$sid.*; S="$D/vg/stale-wt"
+(cd "$R" && git worktree add -q "$S" -b stale >/dev/null 2>&1); rm -rf "$S"
+mkdir -p "$S/.claude" && (cd "$S" && git init -q)
+printf '#!/bin/sh\necho "stale ran"; exit 1\n' > "$S/.claude/verify.sh"; chmod +x "$S/.claude/verify.sh"; echo x > "$S/f.txt"; rec "$S/f.txt"
+expect "new repo at a stale worktree path is not run" "$(stop | grep -c 'stale ran')" "0"
 rm -rf "$D/vg" ~/.cache/claude-verify/test-*
 exit $fail

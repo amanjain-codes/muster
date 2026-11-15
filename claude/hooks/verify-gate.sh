@@ -43,21 +43,25 @@ roots=$(for f in "${changed[@]}"; do git -C "$(dirname "$f")" rev-parse --show-t
 # Checks run repo code (go test, a repo's .claude/verify.sh), so only in repos you trust:
 # one repo path per line in ~/.config/muster/trusted-roots (`muster trust` inside a repo adds it).
 # Exact repos, not parent folders: a clone or fork checkout dropped into your code folder must not run unasked.
-# A worktree counts as its main repo, but only if the trusted repo itself lists it: a folder's own .git file
-# can point anywhere, so asking the folder which repo it belongs to proves nothing.
+# A worktree counts as its main repo only when both sides agree: the trusted repo lists it as a live (not
+# prunable) worktree, AND the folder's own git data is that repo's. Either alone can be faked: a folder's .git
+# file can point anywhere, and a deleted worktree stays listed until pruned, so another repo could take its path.
 TRUST="${MUSTER_TRUSTED_ROOTS_FILE:-$HOME/.config/muster/trusted-roots}"
 trusted() {
   [ -f "$TRUST" ] || return 1
-  local here line wt
+  local here common line wt
   here=$(cd "$1" && pwd -P)
+  common=$(cd "$1" && cd "$(git rev-parse --git-common-dir 2>/dev/null)" 2>/dev/null && pwd -P)
   while IFS= read -r line; do
     line="${line/#\~/$HOME}"; line="${line%/}"
     { [ -n "$line" ] && [ "${line:0:1}" != "#" ]; } || continue
     line=$(cd "$line" 2>/dev/null && pwd -P) || continue
     [ "$here" = "$line" ] && return 0
+    [ -n "$common" ] && [ "$common" = "$(cd "$line/.git" 2>/dev/null && pwd -P)" ] || continue
     while IFS= read -r wt; do
-      [ "$(cd "${wt#worktree }" 2>/dev/null && pwd -P)" = "$here" ] && return 0
-    done < <(git -C "$line" worktree list --porcelain 2>/dev/null | grep '^worktree ')
+      [ "$(cd "$wt" 2>/dev/null && pwd -P)" = "$here" ] && return 0
+    done < <(git -C "$line" worktree list --porcelain 2>/dev/null |
+             awk '/^worktree /{p=substr($0,10)} /^prunable/{p=""} /^$/{if(p!="")print p; p=""} END{if(p!="")print p}')
   done < "$TRUST"
   return 1
 }
