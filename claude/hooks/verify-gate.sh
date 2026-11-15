@@ -43,18 +43,21 @@ roots=$(for f in "${changed[@]}"; do git -C "$(dirname "$f")" rev-parse --show-t
 # Checks run repo code (go test, a repo's .claude/verify.sh), so only in repos you trust:
 # one repo path per line in ~/.config/muster/trusted-roots (`muster trust` inside a repo adds it).
 # Exact repos, not parent folders: a clone or fork checkout dropped into your code folder must not run unasked.
-# A worktree counts as its main repo.
+# A worktree counts as its main repo, but only if the trusted repo itself lists it: a folder's own .git file
+# can point anywhere, so asking the folder which repo it belongs to proves nothing.
 TRUST="${MUSTER_TRUSTED_ROOTS_FILE:-$HOME/.config/muster/trusted-roots}"
 trusted() {
   [ -f "$TRUST" ] || return 1
-  local here main line
+  local here line wt
   here=$(cd "$1" && pwd -P)
-  main=$(cd "$1" && cd "$(git rev-parse --git-common-dir)/.." 2>/dev/null && pwd -P)
   while IFS= read -r line; do
     line="${line/#\~/$HOME}"; line="${line%/}"
     { [ -n "$line" ] && [ "${line:0:1}" != "#" ]; } || continue
     line=$(cd "$line" 2>/dev/null && pwd -P) || continue
-    { [ "$here" = "$line" ] || [ "$main" = "$line" ]; } && return 0
+    [ "$here" = "$line" ] && return 0
+    while IFS= read -r wt; do
+      [ "$(cd "${wt#worktree }" 2>/dev/null && pwd -P)" = "$here" ] && return 0
+    done < <(git -C "$line" worktree list --porcelain 2>/dev/null | grep '^worktree ')
   done < "$TRUST"
   return 1
 }

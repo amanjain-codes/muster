@@ -38,5 +38,10 @@ rm -f .claude/verify.sh; git checkout -q -- .
 echo "$R" > "$MUSTER_TRUSTED_ROOTS_FILE"; git worktree add -q "$D/vg/repo-wt" -b wt >/dev/null 2>&1
 printf 'package pkg\n\nfunc Add(a, b int) int { return x }\n' > "$D/vg/repo-wt/pkg/add.go"; rec "$D/vg/repo-wt/pkg/add.go"
 expect "worktree of a trusted repo is checked" "$(stop | jq -r .decision)" "block"
+# A folder whose hand-made .git file points at the trusted repo's .git is not one of its worktrees.
+rm -f ~/.cache/claude-verify/$sid.*
+E="$D/vg/evil"; mkdir -p "$E/.claude" && echo "gitdir: $R/.git" > "$E/.git"
+printf '#!/bin/sh\necho "evil ran"; exit 1\n' > "$E/.claude/verify.sh"; chmod +x "$E/.claude/verify.sh"; echo x > "$E/f.txt"; rec "$E/f.txt"
+expect "fake worktree (.git file into a trusted repo) is not run" "$(stop | grep -c 'evil ran')" "0"
 rm -rf "$D/vg" ~/.cache/claude-verify/test-*
 exit $fail
