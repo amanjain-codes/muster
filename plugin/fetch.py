@@ -38,7 +38,7 @@ Use only the tools you have. Do not ask questions. Reply with ONE JSON object an
 1. "today": my meetings for the rest of today, earliest first, at most 4. Call list_events on the primary calendar with a time range from now until 23:59 today, and read the event rows it returns. A response with only calendar metadata (summary, timeZone, accessRole) and no events means the day is empty: return [] and do not list it in errors. Only events I organized or accepted. Skip all-day events, events I declined or haven't answered, and events with no other attendees.
    Each: {{"start": "HH:MM" 24h local, "title": short title of at most 28 characters (drop prefixes like "Sync:" and filler words), "url": event html link or null}}.
 2. "jira": Jira issues with JQL `{CFG['jira']['jql']}`, at most 6. Get the cloudId first with getAccessibleAtlassianResources.
-   Each: {{"key": str, "title": short summary of at most 36 characters (drop bracketed tags like "[CTEM]"), "status": str (exactly as Jira shows it), "url": "https://<site>/browse/<key>"}}.
+   Each: {{"key": str, "title": short summary of at most 36 characters (drop bracketed tags like "[TEAM]"), "status": str (exactly as Jira shows it), "url": "https://<site>/browse/<key>"}}.
 3. "errors": a list of short strings, one per part above that failed, else [].
 
 Use null for a part you could not fetch, never invented data."""
