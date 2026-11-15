@@ -28,7 +28,7 @@ Not a Slack client, calendar editor or Jira form (those actions go through Claud
 |---|---|---|
 | Agents + Slack badge | 15 s | local, < 0.5 s |
 | Pull requests + clean-up | 60 s | one GraphQL search |
-| Reviews | 2 min | one GraphQL search, only when `review_repos` is set |
+| Reviews | 2 min | one GraphQL search + one query for the channel's PRs; the channel itself is read with the Slack round (30 min) |
 | Artifacts | 60 s | incremental log scan |
 | Calendar/Jira cache read | 30 s | fetch itself runs when the cache is > 10 min old |
 | Slack mentions | 30 min | part of the fetch; `r` forces it (`MUSTER_SLACK_EVERY` to change) |
@@ -70,4 +70,4 @@ ToolSearch only loads definitions; `--permission-mode dontAsk` still refuses any
 
 ## Test coverage
 
-`tests/run_all.sh`: 97 checks. Verify gate (8): pass, compile error, failing test, fixed, retry cap, Python syntax, repo override, untrusted folder skipped. Review gate (17, incl. bypass attempts): push variants, `cd`/`-C` chains, quoted text, delete/tags, non-repo, reviewed, new commit. CI watcher (4): green, two fix rounds, needs-you, stuck. CI hook (5): landed push, reaches green, non-push, failed push, delete. Notes (22, incl. a fake end marker, escape codes and the recorded head commit): bad keys refused, brief limited to Read/Grep/Glob in the code folder + read-only Jira, review gets no acting tools, diff and PR text kept inside markers, big diffs cut, failures leave a note. Fetch clean-up (18, incl. forged Jira/Calendar links): links must be Slack permalinks, control characters stripped, caps, only the search tool. dash UI (23, incl. reviews of an older commit and the age limit): REVIEWS and Slack rows render, `A` asks first and refuses drafts and red CI, `v` opens briefs and reviews.
+`tests/run_all.sh`: 106 checks. Verify gate (8): pass, compile error, failing test, fixed, retry cap, Python syntax, repo override, untrusted folder skipped. Review gate (17, incl. bypass attempts): push variants, `cd`/`-C` chains, quoted text, delete/tags, non-repo, reviewed, new commit. CI watcher (4): green, two fix rounds, needs-you, stuck. CI hook (5): landed push, reaches green, non-push, failed push, delete. Notes (22, incl. a fake end marker, escape codes and the recorded head commit): bad keys refused, brief limited to Read/Grep/Glob in the code folder + read-only Jira, review gets no acting tools, diff and PR text kept inside markers, big diffs cut, failures leave a note. Fetch clean-up (18, incl. forged Jira/Calendar links): links must be Slack permalinks, control characters stripped, caps, only the search tool. dash UI (23, incl. reviews of an older commit and the age limit): REVIEWS and Slack rows render, `A` asks first and refuses drafts and red CI, `v` opens briefs and reviews.

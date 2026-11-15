@@ -35,6 +35,7 @@ from notes import FAILED, KEY_RE, brief_path, review_head, review_path  # noqa: 
 ORGS = CFG["github"]["orgs"]
 REVIEW_REPOS = CFG["github"]["review_repos"]
 REVIEW_MAX_AGE = int(CFG["github"]["review_max_age_hours"] or 0) * 3600  # seconds; 0 = no limit
+REVIEW_CHANNEL = CFG["slack"]["review_channel_id"]  # PRs posted here show in REVIEWS (the fetch reads the channel)
 CCUSAGE = ["bunx", "ccusage@20.0.47"] if shutil.which("bunx") else ["npx", "-y", "ccusage@20.0.47"]
 
 # herdr may start this pane without the login shell's PATH.
@@ -300,11 +301,9 @@ def load_prs(login: str) -> list[dict]:
     return out
 
 
-REVIEW_QUERY = """
-query($q: String!) {
-  search(query: $q, type: ISSUE, first: 30) {
-    nodes { ... on PullRequest {
-      number title url isDraft headRefOid createdAt author { login }
+PR_FIELDS = """
+      number title url isDraft headRefOid createdAt state viewerDidAuthor author { login }
+      viewerLatestReview { state }
       repository { nameWithOwner viewerDefaultMergeMethod }
       timelineItems(itemTypes: [REVIEW_REQUESTED_EVENT], last: 1) { nodes { ... on ReviewRequestedEvent { createdAt } } }
       commits(last: 1) { nodes { commit { statusCheckRollup {
@@ -314,35 +313,81 @@ query($q: String!) {
           ... on CheckRun { name conclusion status }
           ... on StatusContext { context state }
         } }
-      } } } }
-    } }
-  }
-}"""
+      } } } }"""
+REVIEW_QUERY = "query($q: String!) { search(query: $q, type: ISSUE, first: 30) { nodes { ... on PullRequest {" + PR_FIELDS + " } } } }"
+PR_URL = re.compile(r"^https://github\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)/pull/(\d+)$")
+
+
+def team_query(team: list[dict]) -> tuple[str, list[dict]]:
+    """One GraphQL query for every PR posted in the review channel (aliases p0, p1, ...).
+    Links come from Slack, so only github.com PR links in github.orgs get in, and only their parsed parts."""
+    orgs = {o.lower() for o in ORGS}
+    parts, used = [], []
+    for t in team:
+        m = PR_URL.match(str(t.get("url", "")))
+        if not m or (orgs and m.group(1).lower() not in orgs):
+            continue
+        parts.append(f'p{len(used)}: repository(owner: "{m.group(1)}", name: "{m.group(2)}") '
+                     f'{{ pullRequest(number: {int(m.group(3))}) {{{PR_FIELDS} }} }}')
+        used.append(t)
+    return "query { " + " ".join(parts) + " }", used
+
+
+def graphql(query: str, *args: str) -> dict:
+    """gh api graphql that keeps partial results: one PR we can't see must not hide the others."""
+    r = subprocess.run(["gh", "api", "graphql", "-f", f"query={query}", *args], capture_output=True, text=True, timeout=30)
+    data = (json.loads(r.stdout) if r.stdout.strip().startswith("{") else {}).get("data") or {}
+    if not data and r.returncode:
+        raise RuntimeError((r.stderr.strip().splitlines() or ["gh api graphql failed"])[-1])
+    return data
 
 
 def load_reviews() -> list[dict]:
-    """Open PRs in github.review_repos where your review is requested, oldest request first."""
-    if not REVIEW_REPOS:
-        return []
-    q = "is:pr is:open review-requested:@me " + " ".join(f"repo:{r}" for r in REVIEW_REPOS)
-    data = json.loads(run(["gh", "api", "graphql", "-f", f"query={REVIEW_QUERY}", "-F", f"q={q}"]))
-    out = []
-    for pr in data["data"]["search"]["nodes"]:
-        if not pr:
-            continue
+    """PRs posted in slack.review_channel_id (from the fetch cache) plus PRs in github.review_repos asking for your review."""
+    direct: list[dict] = []
+    if REVIEW_REPOS:
+        q = "is:pr is:open review-requested:@me " + " ".join(f"repo:{r}" for r in REVIEW_REPOS)
+        direct = [n for n in graphql(REVIEW_QUERY, "-F", f"q={q}")["search"]["nodes"] if n]
+    team_nodes: list[tuple[dict | None, float]] = []
+    team = (json.loads(COMMS.read_text()).get("team_prs") or []) if REVIEW_CHANNEL and COMMS.exists() else []
+    query, used = team_query(team)
+    if used:
+        data = graphql(query)
+        team_nodes = [((data.get(f"p{i}") or {}).get("pullRequest"), float(t.get("ts") or 0)) for i, t in enumerate(used)]
+    return build_reviews(direct, team_nodes, REVIEW_MAX_AGE)
+
+
+def build_reviews(direct: list[dict], team: list[tuple[dict | None, float]], max_age: int, now: float | None = None) -> list[dict]:
+    """One row per open PR you didn't write and haven't approved. src: "team" (posted in the channel) and/or "you"
+    (asks you directly); asked: the most recent of those two moments, which the age limit applies to."""
+    rows: dict[str, dict] = {}
+
+    def add(pr: dict | None, when: float, src: str) -> None:
+        if not pr or pr.get("state", "OPEN") != "OPEN" or pr.get("viewerDidAuthor") \
+                or (pr.get("viewerLatestReview") or {}).get("state") == "APPROVED":
+            return
+        row = rows.get(pr["url"])
+        if row:
+            row["src"].add(src)
+            row["asked"] = max(row["asked"], when)
+            return
         ok, fail, total, first_fail = check_summary(pr)
+        rows[pr["url"]] = dict(kind="review", number=pr["number"], title=pr["title"], url=pr["url"], draft=pr["isDraft"],
+                               author=(pr.get("author") or {}).get("login", ""), repo=pr["repository"]["nameWithOwner"],
+                               method=pr["repository"]["viewerDefaultMergeMethod"], asked=when, head=pr["headRefOid"],
+                               src={src}, ok=ok, fail=fail, total=total, first_fail=first_fail)
+
+    for pr in direct:
         ev = pr["timelineItems"]["nodes"]
         # When the review was asked for; a PR without that event (rare) counts from when it was opened.
-        asked = dt.datetime.fromisoformat((ev[0] if ev else pr)["createdAt"].replace("Z", "+00:00")).timestamp()
-        out.append(dict(kind="review", number=pr["number"], title=pr["title"], url=pr["url"], draft=pr["isDraft"],
-                        author=(pr.get("author") or {}).get("login", ""), repo=pr["repository"]["nameWithOwner"],
-                        method=pr["repository"]["viewerDefaultMergeMethod"], asked=asked, head=pr["headRefOid"],
-                        ok=ok, fail=fail, total=total, first_fail=first_fail))
-    return recent_reviews(out, REVIEW_MAX_AGE)
+        add(pr, dt.datetime.fromisoformat((ev[0] if ev else pr)["createdAt"].replace("Z", "+00:00")).timestamp(), "you")
+    for pr, posted in team:
+        add(pr, posted, "team")
+    return recent_reviews(list(rows.values()), max_age, now)
 
 
 def recent_reviews(prs: list[dict], max_age: int, now: float | None = None) -> list[dict]:
-    """Oldest request first; with max_age (seconds) only requests newer than that."""
+    """Oldest first; with max_age (seconds) only the ones newer than that."""
     now = now or time.time()
     keep = [p for p in prs if not max_age or now - (p["asked"] or now) <= max_age]
     return sorted(keep, key=lambda p: p["asked"] or now)
@@ -779,14 +824,17 @@ class Dash(App):
                     state + Text(" ") + tag + Text(f"{repo}#{p['number']} ", ACC) + Text(p["title"][:30]) + badge,
                     ("" if is_shared or not SHARE_CHANNEL else f"s share to {SHARE_NAME} · ") + "o open · C Claude · M merge")
 
-        if REVIEW_REPOS:
-            names = ", ".join(r.split("/")[-1] for r in REVIEW_REPOS)
+        if REVIEW_REPOS or REVIEW_CHANNEL:
+            where = [SHARE_NAME if REVIEW_CHANNEL == SHARE_CHANNEL else "the team channel"] if REVIEW_CHANNEL else []
+            names = " + ".join(where + ([", ".join(r.split("/")[-1] for r in REVIEW_REPOS)] if REVIEW_REPOS else []))
             if REVIEW_MAX_AGE:
                 names += f" · last {REVIEW_MAX_AGE // 3600}h"
             section("REVIEWS", f"{len(self.reviews)} waiting on you · {names}" if "reviews" in self.updated else names)
             if not err_or_wait("reviews"):
                 if not self.reviews:
                     t.append("  nothing waiting on your review\n", DIM)
+                elif REVIEW_CHANNEL and REVIEW_REPOS:  # the legend matters only when both sources are on
+                    t.append("  # posted in the channel  → asks you directly\n", DIM)
                 for p in self.reviews:
                     note = self.review_state(p)
                     badge = {"ready": Text(" ✎ review", GREEN), "writing": Text(" … reviewing", DIM),
@@ -796,8 +844,11 @@ class Dash(App):
                     if p["asked"]:
                         old = time.time() - p["asked"] > 86400
                         waited = Text(f" {ago(p['asked'])}", f"bold {ORANGE}" if old else DIM)
+                    src = p.get("src") or {"you"}
+                    mark = Text("#", f"bold {AQUA}") if "team" in src else Text(" ")
+                    mark += Text("→ ", f"bold {YELLOW}") if "you" in src else Text("  ")
                     row(dict(sec="REVIEWS", kind="review", url=p["url"], p=p),
-                        ci_label(p) + Text(" ") + (Text("draft ", DIM) if p["draft"] else Text(""))
+                        mark + ci_label(p) + Text(" ") + (Text("draft ", DIM) if p["draft"] else Text(""))
                         + Text(f"{p['repo'].split('/')[-1]}#{p['number']} ", ACC) + Text(p["title"][:30])
                         + Text(f" @{p['author'][:12]}", DIM) + waited + badge,
                         {"ready": "v read review", "outdated": "v review again"}.get(note, "v Claude review") + " · A approve + merge · o open")

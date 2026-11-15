@@ -16,7 +16,7 @@ DEFAULTS = {
     "github": {"orgs": [], "review_repos": [], "review_max_age_hours": 0},  # 0 = no age limit
     "workspace": {"code_root": "~/Projects", "worktree_glob": "{code_root}/*.worktrees/*",
                   "new_agent": "direct"},  # "direct": dash starts claude; "autoclaude": a herdr plugin does
-    "slack": {"share_channel_id": "", "share_channel_name": "", "share_mention": ""},
+    "slack": {"share_channel_id": "", "share_channel_name": "", "share_mention": "", "review_channel_id": ""},
     "jira": {"jql": "assignee = currentUser() AND issuetype in (Story, Bug) AND statusCategory != Done ORDER BY updated DESC"},
     "connectors": {"calendar": "mcp__claude_ai_Google_Calendar__", "jira": "mcp__claude_ai_Atlassian_MCP__",
                    "slack": "mcp__claude_ai_Slack__"},
@@ -67,6 +67,7 @@ ENV_KEYS = {
     "MUSTER_SHARE_CHANNEL_ID": ("slack", "share_channel_id"),
     "MUSTER_SHARE_CHANNEL_NAME": ("slack", "share_channel_name"),
     "MUSTER_SHARE_MENTION": ("slack", "share_mention"),
+    "MUSTER_REVIEW_CHANNEL_ID": ("slack", "review_channel_id"),
     "MUSTER_JIRA_JQL": ("jira", "jql"),
     "MUSTER_MODEL_FETCH": ("models", "fetch"),
 }

@@ -42,7 +42,7 @@ Every action that changes something asks `y/n` first and refuses when it's unsaf
 - **TODO**: notes in `~/.config/muster/todo.md` (plain markdown, edit it anywhere; shared by every dash).
 - **TODAY / JIRA**: from your claude.ai connectors, fetched in the background (see SPECS.md for timing and cost).
 - **PULL REQUESTS**: your open PRs in `github.orgs`, with CI state.
-- **REVIEWS**: PRs in `github.review_repos` that wait on your review, oldest first, with how long they've waited; `review_max_age_hours` limits it to recent requests. Hidden when `review_repos` is empty.
+- **REVIEWS**: open PRs posted in `slack.review_channel_id` (any repo in `github.orgs`, marked `#`) plus PRs in `github.review_repos` that ask for your review (marked `→`), oldest first. Merged, closed, your own and ones you've approved are hidden; `review_max_age_hours` keeps only recent ones. Hidden when neither is set.
 - **CLEAN UP**: shows only when a worktree's PR has merged.
 - **ARTIFACTS**: your last 5 artifacts created, updated or opened from Claude Code.
 - **SLACK**: the unread count from the Slack app's Dock badge, then who mentioned or DM'd you in the last 24 hours (bots and your own messages left out); `o` opens the thread.

@@ -2,6 +2,10 @@
 
 All notable changes to Muster. Versions follow [semantic versioning](https://semver.org): breaking changes bump the major, features the minor, fixes the patch.
 
+## 0.3.0 (2026-11-15)
+
+- REVIEWS can follow a Slack channel: `slack.review_channel_id` adds every open PR posted there (any repo in `github.orgs`), marked `#`, next to direct requests in `review_repos`, marked `→`. Merged, closed, your own and already-approved PRs are hidden. Links must be github.com PRs in your orgs.
+
 ## 0.2.2 (2026-11-15)
 
 - `github.review_max_age_hours`: REVIEWS shows only requests made within that many hours (0 = all).

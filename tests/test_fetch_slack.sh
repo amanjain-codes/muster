@@ -3,7 +3,7 @@
 set -u
 D=$(cd "$(dirname "$0")" && pwd)
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
-HOME="$T" python3 - "$D/../plugin" <<'EOF'
+HOME="$T" MUSTER_GITHUB_ORGS=acme python3 - "$D/../plugin" <<'EOF'
 import sys
 sys.path.insert(0, sys.argv[1])
 from fetch import sanitize_slack, READ_TOOLS
@@ -51,5 +51,22 @@ expect("today: other links dropped", m[1]["url"], None)
 expect("today: bad start time dropped", len(m), 2)
 expect("prompt without Slack has no Slack part", ("slack_search" in prompt(False), '3. "errors"' in prompt(False)), (False, True))
 expect("prompt with Slack uses a 24h unix cutoff", ('after="' in prompt(True), '4. "errors"' in prompt(True)), (True, True))
+import fetch
+from fetch import sanitize_team
+tp = sanitize_team([
+    {"url": "https://github.com/acme/svc/pull/12", "ts": 100, "who": "Sam"},
+    {"url": "https://github.com/acme/svc/pull/12/files", "ts": 200, "who": "Sam"},
+    {"url": "https://github.com/acme/web/pull/3?w=1", "ts": 150},
+    {"url": "https://github.com/evil/svc/pull/1", "ts": 300},
+    {"url": "https://github.com.evil.io/acme/svc/pull/2", "ts": 300},
+    {"url": "https://github.com/acme/svc/issues/5", "ts": 300},
+])
+expect("team: same PR once, latest post, newest first", [(x["url"], x["ts"]) for x in tp],
+       [("https://github.com/acme/svc/pull/12", 200.0), ("https://github.com/acme/web/pull/3", 150.0)])
+fetch.REVIEW_CHANNEL = ""
+expect("no review channel: no team part", "team_prs" in prompt(True), False)
+fetch.REVIEW_CHANNEL = "C0TEAM"
+expect("review channel: team part before errors", ('4. "team_prs"' in prompt(True), '5. "errors"' in prompt(True)), (True, True))
+expect("  ...and only with the Slack round", ("team_prs" in prompt(False), '3. "errors"' in prompt(False)), (False, True))
 sys.exit(fail)
 EOF

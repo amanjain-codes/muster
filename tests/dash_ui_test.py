@@ -65,7 +65,7 @@ async def main():
                                 "url": "https://acme.slack.com/archives/C1/p1"}]}
         app.render_view()
         s = app.screen_text
-        expect("REVIEWS section shows", "REVIEWS" in s and "3 waiting on you · svc" in s, True)
+        expect("REVIEWS section names its sources", "REVIEWS" in s and "3 waiting on you · the team channel + svc" in s, True)
         expect("review row: repo#number and author", "svc#7 change 7 @dev1" in s, True)
         expect("review waiting >1 day is shown", " 2d" in s, True)
         expect("ready review marked", "✎ review" in s, True)
@@ -114,6 +114,30 @@ async def main():
         aged = [pr(1, asked=t0 - 50 * 3600), pr(2, asked=t0 - 47 * 3600), pr(3, asked=t0 - 3600)]
         expect("48h limit drops older requests, oldest first", [p["number"] for p in dash.recent_reviews(aged, 48 * 3600, t0)], [2, 3])
         expect("no limit keeps all", len(dash.recent_reviews(aged, 0, t0)), 3)
+
+        def node(n, **kw):
+            base = dict(number=n, title=f"pr {n}", url=f"https://github.com/acme/svc/pull/{n}", isDraft=False, headRefOid="f" * 40,
+                        createdAt="2026-01-01T00:00:00Z", state="OPEN", viewerDidAuthor=False, viewerLatestReview=None,
+                        author={"login": "dev1"}, repository={"nameWithOwner": "acme/svc", "viewerDefaultMergeMethod": "SQUASH"},
+                        timelineItems={"nodes": []}, commits={"nodes": []})
+            return {**base, **kw}
+        t0 = 1_800_000_000.0
+        rows = dash.build_reviews(
+            [node(1, timelineItems={"nodes": [{"createdAt": "2027-01-15T07:00:00Z"}]})],
+            [(node(1), t0 - 3600), (node(2), t0 - 7200), (node(3, state="MERGED"), t0), (node(4, viewerDidAuthor=True), t0),
+             (node(5, viewerLatestReview={"state": "APPROVED"}), t0), (None, t0), (node(6), t0 - 50 * 3600)],
+            48 * 3600, t0)
+        expect("team + direct: merged, mine, approved, missing and >48h dropped", [r["number"] for r in rows], [2, 1])
+        expect("a PR in both lists is one row with both marks", sorted(next(r for r in rows if r["number"] == 1)["src"]), ["team", "you"])
+        q, used = dash.team_query([{"url": "https://github.com/acme/svc/pull/7", "ts": 1}, {"url": "https://github.com/evil/x/pull/1", "ts": 1},
+                                   {"url": 'https://github.com/acme/a"){x}/pull/1', "ts": 1}])
+        expect("team query: only org PR links, parsed parts only", (len(used), 'owner: "acme", name: "svc"' in q, "evil" in q, "{x}" in q),
+               (1, True, False, False))
+
+        app.reviews = [dict(pr(21), src={"team"}), dict(pr(22), src={"you"}), dict(pr(23), src={"team", "you"})]
+        app.render_view()
+        line = {n: next(l for l in app.screen_text.splitlines() if f"svc#{n} " in l) for n in (21, 22, 23)}
+        expect("row marks: # team, → you, #→ both", [line[21].lstrip("▸ ")[:2], line[22].lstrip("▸ ")[:2], line[23].lstrip("▸ ")[:2]], ["# ", "→ ", "#→"])
 
         app.notes_started[str(dash.brief_path("ABC-2"))] = time.time()
         expect("a running brief shows as writing", app.note_state(dash.brief_path("ABC-2")), "writing")

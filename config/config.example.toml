@@ -25,6 +25,8 @@ share_channel_id = ""
 share_channel_name = "#your-team"
 # Who to tag. A user group: "<!subteam^S0123456789>" (the group's id); a person: "<@U0123456789>"; or "".
 share_mention = ""
+# PRs posted in this channel (any repo in github.orgs) show in REVIEWS, marked #. Usually your team's PR channel.
+review_channel_id = ""
 
 [jira]
 jql = "assignee = currentUser() AND issuetype in (Story, Bug) AND statusCategory != Done ORDER BY updated DESC"
