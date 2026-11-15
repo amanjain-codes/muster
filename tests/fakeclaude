@@ -1,0 +1,6 @@
+#!/bin/bash
+# Fake `claude -p` for notes tests: records its arguments, folder and prompt, then answers like the real JSON output.
+# FAKE_CLAUDE_LOG: where to record. FAKE_CLAUDE_FAIL=1: answer with is_error.
+{ printf '%s\n' "$@"; echo "--cwd=$(pwd -P)"; echo "--stdin-follows--"; cat; } > "$FAKE_CLAUDE_LOG"
+if [ "${FAKE_CLAUDE_FAIL:-0}" = 1 ]; then echo '{"is_error":true,"result":"model overloaded"}'; exit 1; fi
+echo '{"is_error":false,"result":"# NOTE\n- written by fakeclaude"}'

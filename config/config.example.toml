@@ -4,6 +4,8 @@
 [github]
 # GitHub orgs whose PRs you author show in PULL REQUESTS. Empty = all orgs.
 orgs = ["your-github-org"]
+# Repos whose PRs waiting on your review show in REVIEWS (owner/name). Empty = no REVIEWS section.
+review_repos = []
 
 [workspace]
 # Where your repos live. New ticket agents (n in JIRA) start here.
@@ -29,9 +31,13 @@ jql = "assignee = currentUser() AND issuetype in (Story, Bug) AND statusCategory
 # Tool-name prefixes of your claude.ai connectors (check with `claude mcp list` or /mcp in Claude Code).
 calendar = "mcp__claude_ai_Google_Calendar__"
 jira = "mcp__claude_ai_Atlassian_MCP__"
+slack = "mcp__claude_ai_Slack__"
 
 [models]
 # Small, cheap models are enough for these background jobs.
 fetch = "claude-haiku-5-5"
 recap = "claude-haiku-5-5"
 share = "claude-haiku-5-5"
+# These read code or a diff, so they get a stronger model. They run only when you press b or v.
+brief = "claude-sonnet-5-5"
+review = "claude-sonnet-5-5"

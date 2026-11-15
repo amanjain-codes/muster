@@ -30,8 +30,10 @@ CTX_DIR = CACHE / "ctx"  # written by ~/.claude/statusline.sh, one file per sess
 COMMS = CACHE / "comms.json"  # written by the (future) Calendar/Jira/Slack fetcher
 sys.path.insert(0, str(Path(__file__).parent))
 from dashconf import CFG  # noqa: E402  per-user settings: ~/.config/muster/config.toml
+from notes import FAILED, KEY_RE, brief_path, review_path  # noqa: E402  b (ticket brief) and v (PR review) write these
 
 ORGS = CFG["github"]["orgs"]
+REVIEW_REPOS = CFG["github"]["review_repos"]
 CCUSAGE = ["bunx", "ccusage@20.0.47"] if shutil.which("bunx") else ["npx", "-y", "ccusage@20.0.47"]
 
 # herdr may start this pane without the login shell's PATH.
@@ -48,7 +50,7 @@ SPIN = "◐◓◑◒"
 ICONS = {"ARTIFACTS": "✧", "TODO": "☐", "TODAY": "◷", "JIRA": "◆", "PULL REQUESTS": "⎇", "CLEAN UP": "♻", "SLACK": "#",
          "AGENTS": "◉", "SPEND": "$", "RECAP": "✎"}
 
-SECTIONS = ["TODO", "TODAY", "JIRA", "PRS", "CLEANUP", "ARTIFACTS", "SLACK", "AGENTS", "SPEND", "RECAP"]
+SECTIONS = ["TODO", "TODAY", "JIRA", "PRS", "REVIEWS", "CLEANUP", "ARTIFACTS", "SLACK", "AGENTS", "SPEND", "RECAP"]
 
 # Notes live in a plain markdown checklist, so they can also be edited by hand (e.g. in fresh).
 TODO_FILE = Path(os.environ.get("MUSTER_TODO", str(HOME / ".config" / "muster" / "todo.md")))
@@ -178,7 +180,7 @@ def send_slack(channel: str, message: str) -> str:
               "do not change, reformat or add anything, keep <!subteam^...> mentions as they are, and set unfurl_app_links to true. "
               "Then reply with only the message permalink.\n<<<MSG\n" + message + "\nMSG>>>")
     r = subprocess.run(["claude", "-p", "--model", CFG["models"]["share"], "--output-format", "json",
-                        "--tools", "", "--permission-mode", "dontAsk", "--allowedTools", "mcp__claude_ai_Slack__slack_send_message"],
+                        "--tools", "ToolSearch", "--permission-mode", "dontAsk", "--allowedTools", "mcp__claude_ai_Slack__slack_send_message"],
                        input=prompt, capture_output=True, text=True, timeout=120)
     result = json.loads(r.stdout).get("result", "") if r.stdout.strip() else ""
     m = re.search(r"https://\S*slack\.com/archives/\S+", result)
@@ -295,6 +297,63 @@ def load_prs(login: str) -> list[dict]:
                             repo=pr["repository"]["nameWithOwner"], method=pr["repository"]["viewerDefaultMergeMethod"],
                             auto=bool(pr["autoMergeRequest"]), ok=ok, fail=fail, total=total, first_fail=first_fail))
     return out
+
+
+REVIEW_QUERY = """
+query($q: String!) {
+  search(query: $q, type: ISSUE, first: 30) {
+    nodes { ... on PullRequest {
+      number title url isDraft author { login }
+      repository { nameWithOwner viewerDefaultMergeMethod }
+      timelineItems(itemTypes: [REVIEW_REQUESTED_EVENT], last: 1) { nodes { ... on ReviewRequestedEvent { createdAt } } }
+      commits(last: 1) { nodes { commit { statusCheckRollup {
+        state
+        contexts(first: 100) { nodes {
+          __typename
+          ... on CheckRun { name conclusion status }
+          ... on StatusContext { context state }
+        } }
+      } } } }
+    } }
+  }
+}"""
+
+
+def load_reviews() -> list[dict]:
+    """Open PRs in github.review_repos where your review is requested, oldest request first."""
+    if not REVIEW_REPOS:
+        return []
+    q = "is:pr is:open review-requested:@me " + " ".join(f"repo:{r}" for r in REVIEW_REPOS)
+    data = json.loads(run(["gh", "api", "graphql", "-f", f"query={REVIEW_QUERY}", "-F", f"q={q}"]))
+    out = []
+    for pr in data["data"]["search"]["nodes"]:
+        if not pr:
+            continue
+        ok, fail, total, first_fail = check_summary(pr)
+        ev = pr["timelineItems"]["nodes"]
+        asked = dt.datetime.fromisoformat(ev[0]["createdAt"].replace("Z", "+00:00")).timestamp() if ev else None
+        out.append(dict(kind="review", number=pr["number"], title=pr["title"], url=pr["url"], draft=pr["isDraft"],
+                        author=(pr.get("author") or {}).get("login", ""), repo=pr["repository"]["nameWithOwner"],
+                        method=pr["repository"]["viewerDefaultMergeMethod"], asked=asked,
+                        ok=ok, fail=fail, total=total, first_fail=first_fail))
+    return sorted(out, key=lambda p: p["asked"] or time.time())
+
+
+def ci_label(p: dict) -> Text:
+    counts = f"{p['ok']}/{p['total']}"
+    if p["fail"]:
+        label, color = "✗ " + (p["first_fail"] or "failed")[:10], RED
+    elif p["total"] and p["ok"] == p["total"]:
+        label, color = "✓ " + counts, GREEN
+    elif p["total"]:
+        label, color = "● " + counts, YELLOW
+    else:
+        label, color = "○ no checks", DIM
+    return Text(f"{label:<13}", color)
+
+
+def all_green(p: dict) -> bool:
+    return bool(p["total"]) and p["ok"] == p["total"]
 
 
 _log_paths: dict[str, str | None] = {}
@@ -438,7 +497,7 @@ def load_comms(force: bool = False) -> dict | None:
     age = time.time() - max((data or {}).get("updated", 0), (data or {}).get("last_error_at", 0))
     if (force or age > COMMS_EVERY) and time.time() - _fetch_started > 300:
         _fetch_started = time.time()
-        subprocess.Popen([sys.executable, str(Path(__file__).with_name("fetch.py"))],
+        subprocess.Popen([sys.executable, str(Path(__file__).with_name("fetch.py")), *(["--all"] if force else [])],
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
     return data
 
@@ -474,7 +533,9 @@ class Dash(App):
         Binding("F", "force_cleanup", show=False),
         Binding("X", "close_agent", show=False),
         Binding("w", "recap", show=False),
-        Binding("v", "view_recap", show=False),
+        Binding("v", "view", show=False),
+        Binding("b", "brief", show=False),
+        Binding("A", "approve_merge", show=False),
         Binding("a", "todo_add", show=False),
         Binding("e", "todo_edit", show=False),
         Binding("space", "todo_toggle", show=False),
@@ -490,6 +551,8 @@ class Dash(App):
         self.frame = 0  # spinner frame for working agents
         self.login: str | None = None
         self.prs: list[dict] = []
+        self.reviews: list[dict] = []
+        self.notes_started: dict[str, float] = {}  # note path -> when b/v started writing it
         self.cleanup: list[dict] = []
         self.agents: list[dict] = []
         self.spend: dict | None = None
@@ -508,7 +571,7 @@ class Dash(App):
         self.todo_mtime = 0.0
         self.editing: int | None = None  # index of the note being edited, None when adding
         self.recap_started = 0.0
-        self.viewing = False  # showing the recap instead of the dashboard
+        self.viewing: Path | None = None  # a recap, brief or review shown instead of the dashboard
 
     def compose(self) -> ComposeResult:
         with VerticalScroll():
@@ -522,6 +585,7 @@ class Dash(App):
         self.set_interval(3, self.reload_todos)  # picks up edits made to todo.md by hand
         self.refresh_all()
         self.set_interval(60, lambda: self.fetch("prs"))
+        self.set_interval(120, lambda: self.fetch("reviews"))
         self.set_interval(15, lambda: self.fetch("agents"))
         self.set_interval(300, lambda: self.fetch("spend"))
         self.set_interval(30, lambda: self.fetch("comms"))
@@ -546,6 +610,8 @@ class Dash(App):
                     self.login = run(["gh", "api", "user", "--jq", ".login"]).strip()
                 self.prs = load_prs(self.login)
                 self.cleanup = load_cleanup(self.login)
+            elif what == "reviews":
+                self.reviews = load_reviews()
             elif what == "agents":
                 self.agents = load_agents()
                 self.slack = load_slack()
@@ -569,23 +635,23 @@ class Dash(App):
         self.call_from_thread(self.render_view)
 
     def refresh_all(self) -> None:
-        for w in ("prs", "agents", "spend", "comms", "artifacts", "doctor"):
+        for w in ("prs", "reviews", "agents", "spend", "comms", "artifacts", "doctor"):
             self.fetch(w)
 
     def action_refresh_all(self) -> None:
         # Everything: PRs, agents, Slack, spend, artifacts, the health check, and a fresh Calendar/Jira fetch.
-        self.flash = "refreshing everything… Calendar and Jira take about 20s"
+        self.flash = "refreshing everything… Calendar, Jira and Slack take about 30s"
         self.force_comms = True
         self.reload_todos()
         self.refresh_all()
 
     # --- rendering ---
     def render_view(self) -> None:
-        if self.viewing and recap_file().exists():
+        if self.viewing and self.viewing.exists():
             from rich.console import Group
             from rich.markdown import Markdown
             hint = Text("v or Esc back to dash · ↑↓ scroll\n", DIM)
-            self.query_one("#body", Static).update(Group(hint, Markdown(recap_file().read_text())))
+            self.query_one("#body", Static).update(Group(hint, Markdown(self.viewing.read_text())))
             return
         t = Text(no_wrap=True, overflow="ellipsis")
         items: list[dict] = []
@@ -681,9 +747,13 @@ class Dash(App):
             t.append("  waiting for the first fetch\n", DIM)
         else:
             for j in c.get("jira", [])[:5]:
+                key = j.get("key", "")
+                note = self.note_state(brief_path(key)) if KEY_RE.match(key) else ""
+                badge = {"ready": Text(" ✎ brief", GREEN), "writing": Text(" … brief", DIM),
+                         "failed": Text(" ✗ brief failed", ORANGE)}.get(note, Text(""))
                 row(dict(sec="JIRA", kind="jira", url=j.get("url"), j=j),
-                    Text(f"{j.get('key', ''):<10}", ACC) + Text(f"{short_status(j.get('status', '')):<14}", PURPLE) + Text(j.get("title", "")[:36]),
-                    "n new agent on it · o open · C Claude")
+                    Text(f"{key:<10}", ACC) + Text(f"{short_status(j.get('status', '')):<14}", PURPLE) + Text(j.get("title", "")[:36]) + badge,
+                    ("v read brief · b rewrite" if note == "ready" else "b brief") + " · n new agent on it · o open · C Claude")
 
         section("PULL REQUESTS", " ".join(ORGS))
         if not err_or_wait("prs"):
@@ -691,16 +761,7 @@ class Dash(App):
                 t.append("  no open PRs\n", DIM)
             shared = shared_prs()
             for p in self.prs:
-                counts = f"{p['ok']}/{p['total']}"
-                if p["fail"]:
-                    label, color = "✗ " + (p["first_fail"] or "failed")[:10], RED
-                elif p["total"] and p["ok"] == p["total"]:
-                    label, color = "✓ " + counts, GREEN
-                elif p["total"]:
-                    label, color = "● " + counts, YELLOW
-                else:
-                    label, color = "○ no checks", DIM
-                state = Text(f"{label:<13}", color)
+                state = ci_label(p)
                 tag = Text("draft ", DIM) if p["draft"] else Text("")
                 repo = p["repo"].split("/")[-1]
                 is_shared = p["url"] in shared
@@ -708,6 +769,26 @@ class Dash(App):
                 row(dict(sec="PRS", kind="pr", url=p["url"], p=p),
                     state + Text(" ") + tag + Text(f"{repo}#{p['number']} ", ACC) + Text(p["title"][:30]) + badge,
                     ("" if is_shared or not SHARE_CHANNEL else f"s share to {SHARE_NAME} · ") + "o open · C Claude · M merge")
+
+        if REVIEW_REPOS:
+            names = ", ".join(r.split("/")[-1] for r in REVIEW_REPOS)
+            section("REVIEWS", f"{len(self.reviews)} waiting on you · {names}" if "reviews" in self.updated else names)
+            if not err_or_wait("reviews"):
+                if not self.reviews:
+                    t.append("  nothing waiting on your review\n", DIM)
+                for p in self.reviews:
+                    note = self.note_state(review_path(p["repo"], p["number"]))
+                    badge = {"ready": Text(" ✎ review", GREEN), "writing": Text(" … reviewing", DIM),
+                             "failed": Text(" ✗ review failed", ORANGE)}.get(note, Text(""))
+                    waited = Text("")
+                    if p["asked"]:
+                        old = time.time() - p["asked"] > 86400
+                        waited = Text(f" {ago(p['asked'])}", f"bold {ORANGE}" if old else DIM)
+                    row(dict(sec="REVIEWS", kind="review", url=p["url"], p=p),
+                        ci_label(p) + Text(" ") + (Text("draft ", DIM) if p["draft"] else Text(""))
+                        + Text(f"{p['repo'].split('/')[-1]}#{p['number']} ", ACC) + Text(p["title"][:30])
+                        + Text(f" @{p['author'][:12]}", DIM) + waited + badge,
+                        ("v read review" if note == "ready" else "v Claude review") + " · A approve + merge · o open")
 
         if self.cleanup:
             section("CLEAN UP", f"{len(self.cleanup)} merged, worktree still around", DIM)
@@ -728,7 +809,7 @@ class Dash(App):
                 row(dict(sec="ARTIFACTS", kind="artifact", url=a["url"]),
                     Text(f"{a['title'][:40]:<40} ", FG) + Text(f"{a['how']} {ago(a['ts'])} ago", DIM), "o open in browser · d hide")
 
-        section("SLACK", "from the Slack app badge")
+        section("SLACK", "unread from the Slack badge · mentions and DMs, last 24h")
         s = self.slack
         if s is None:
             line = Text("Slack app not running", DIM)
@@ -739,6 +820,15 @@ class Dash(App):
         else:
             line = Text("all read", GREEN)
         row(dict(sec="SLACK", kind="slack", url="slack://open"), line, "o open Slack")
+        if c is not None:
+            if "slack" in fetch_errors:
+                t.append("  couldn't read Slack mentions on the last fetch · r to retry\n", ORANGE)
+            for m in (c.get("slack") or [])[:5]:
+                when = Text(f"  {ago(m['ts'])}", DIM) if m.get("ts") else Text("")
+                row(dict(sec="SLACK", kind="slack_msg", url=m.get("url")),
+                    Text(f"{m.get('who', '')[:10]:<10} ", YELLOW) + Text(f"{m.get('where', '')[:14]:<14} ", ACC)
+                    + Text(m.get("text", "")[:50]) + when,
+                    "o open the thread" if m.get("url") else "no link for this one")
 
         working = sum(1 for a in self.agents if a["status"] == "working")
         now_ts = time.time()
@@ -899,6 +989,9 @@ class Dash(App):
             if p["fail"]:
                 return f"CI failed on {p['repo']} PR #{p['number']} ({p['title']}). Failing check: {p['first_fail']}. Find out why and propose a fix. {p['url']}"
             return f"Look at {p['repo']} PR #{p['number']} ({p['title']}): {p['url']}"
+        if k == "review":
+            p = it["p"]
+            return f"Review {p['repo']} PR #{p['number']} ({p['title']}) by {p['author']}: {p['url']}"
         if k == "jira":
             j = it["j"]
             return f"Look at Jira {j.get('key')} ({j.get('title')}), currently {j.get('status')}."
@@ -1170,21 +1263,111 @@ class Dash(App):
         self.set_timer(35, self.render_view)
         self.set_timer(70, self.render_view)
 
-    def action_view_recap(self) -> None:
+    # --- Claude's notes: ticket briefs (b) and PR reviews (v) ---
+    def note_state(self, path: Path) -> str:
+        """"writing" while notes.py runs, then "ready" or "failed"; "" when there is no note."""
+        started = self.notes_started.get(str(path), 0.0)
+        exists = path.exists()
+        if started and not (exists and path.stat().st_mtime >= started) and time.time() - started < 600:
+            return "writing"
+        if not exists:
+            return ""
+        with open(path, errors="ignore") as f:
+            return "failed" if f.read(len(FAILED)) == FAILED else "ready"
+
+    def start_notes(self, path: Path, args: list[str], msg: str) -> None:
+        if self.note_state(path) == "writing":
+            return self.say("already on it…")
+        self.notes_started[str(path)] = time.time()
+        subprocess.Popen([sys.executable, str(Path(__file__).with_name("notes.py")), *args],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+        self.say(msg)
+        for s in (20, 45, 90, 150, 300):  # the badge flips to ready on the next render
+            self.set_timer(s, self.render_view)
+
+    def action_brief(self) -> None:
+        it = self.current()
+        if not it or it["kind"] != "jira":
+            return
+        key = it["j"].get("key", "")
+        if not KEY_RE.match(key):  # the key comes from Jira: never pass anything else on
+            return self.say("unexpected ticket key; not writing a brief")
+        self.start_notes(brief_path(key), ["brief", key], f"writing a brief on {key}, about a minute · v to read")
+
+    def action_view(self) -> None:
+        """v: back to dash when viewing; on a JIRA row the brief, on a REVIEWS row the review
+        (written first if missing or failed); anywhere else today's recap."""
         if self.viewing:
-            self.viewing = False
-        elif recap_file().exists():
-            self.viewing = True
+            self.viewing = None
         else:
-            return self.say("no recap yet · press w")
+            it = self.current() or {}
+            if it.get("kind") == "jira" and KEY_RE.match(it["j"].get("key", "")):
+                path, state = brief_path(it["j"]["key"]), self.note_state(brief_path(it["j"]["key"]))
+                if state == "writing":
+                    return self.say("still writing the brief…")
+                if not state:
+                    return self.say("no brief yet · b writes one")
+                self.viewing = path
+            elif it.get("kind") == "review":
+                p = it["p"]
+                path = review_path(p["repo"], p["number"])
+                state = self.note_state(path)
+                if state == "writing":
+                    return self.say("still reviewing…")
+                if state != "ready":
+                    return self.start_notes(path, ["review", p["repo"], str(p["number"])],
+                                            f"Claude is reviewing #{p['number']}, about a minute · v again to read")
+                self.viewing = path
+            elif recap_file().exists():
+                self.viewing = recap_file()
+            else:
+                return self.say("no recap yet · press w")
         self.query_one(VerticalScroll).scroll_home(animate=False)
         self.render_view()
+
+    def action_approve_merge(self) -> None:
+        it = self.current()
+        if not it or it["kind"] != "review":
+            return
+        p = it["p"]
+        if p["draft"]:
+            return self.say("draft PR; not approving it")
+        if p["fail"]:
+            return self.say("CI is red on this PR; not approving it · o to look")
+        method = (p["method"] or "MERGE").lower()
+        self.pending = dict(kind="approve_merge", p=p, method=method,
+                            question=f"Approve {p['repo'].split('/')[-1]}#{p['number']} and merge when green ({method})?")
+        self.render_view()
+
+    def do_approve_merge(self, p: dict, method: str) -> None:
+        n, repo = str(p["number"]), p["repo"]
+
+        def gh(*args: str) -> subprocess.CompletedProcess:
+            return subprocess.run(["gh", "pr", *args, n, "-R", repo], capture_output=True, text=True, timeout=60)
+
+        def last(r: subprocess.CompletedProcess) -> str:
+            return (r.stderr.strip().splitlines() or ["unknown error"])[-1][:70]
+
+        r = gh("review", "--approve")
+        if r.returncode != 0:
+            msg = "approve failed: " + last(r)
+        else:
+            m = gh("merge", "--auto", f"--{method}")
+            if m.returncode == 0:
+                msg = f"approved #{n} · merges when green"
+            elif all_green(p):  # repo without auto-merge: checks are already green, so merge now
+                m = gh("merge", f"--{method}")
+                msg = f"approved and merged #{n}" if m.returncode == 0 else f"approved #{n}; merge failed: " + last(m)
+            else:
+                msg = f"approved #{n}; couldn't queue the merge: " + last(m)
+        self.call_from_thread(self.say, msg)
+        self.fetch("reviews")
 
     def action_confirm(self, yes: bool) -> None:
         if self.typing():  # Esc while typing a note cancels the note
             return self.close_input()
         if self.viewing and not yes:
-            return self.action_view_recap()
+            return self.action_view()
         if not self.pending:
             return
         pend, self.pending = self.pending, None
@@ -1201,6 +1384,10 @@ class Dash(App):
         if pend.get("kind") == "share":
             self.say(f"posting #{pend['p']['number']} to {SHARE_NAME}…")
             self.run_worker(lambda: self.do_share(pend["p"]), thread=True)
+            return
+        if pend.get("kind") == "approve_merge":
+            self.say(f"approving #{pend['p']['number']}…")
+            self.run_worker(lambda: self.do_approve_merge(pend["p"], pend["method"]), thread=True)
             return
         if pend.get("kind") == "force_cleanup":
             return self.do_force_cleanup(pend["w"])

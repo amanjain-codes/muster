@@ -102,7 +102,7 @@ def main() -> int:
                       "agent's ### name verbatim as a `## ` heading, and no other headings or sections. Under each heading, at most 2 bullets of what got done "
                       "and 1 bullet starting 'Left:' for what is open or blocked. Plain words, no filler, under 350 words total. "
                       "Only state what the messages show.\n\n" + "\n\n".join(blocks))
-            r = subprocess.run(["claude", "-p", "--model", MODEL, "--output-format", "json", "--tools", "", "--permission-mode", "dontAsk"],
+            r = subprocess.run(["claude", "-p", "--model", MODEL, "--output-format", "json", "--tools", "ToolSearch", "--permission-mode", "dontAsk"],
                                input=prompt, capture_output=True, text=True, timeout=300)
             envelope = json.loads(r.stdout)
             if envelope.get("is_error"):

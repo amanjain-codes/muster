@@ -29,6 +29,8 @@ It downloads Muster to `~/.muster`, installs what's missing (Ghostty, herdr, the
 - **Quality gates for every agent**: a verify gate (builds and tests what the agent changed before it can say "done") and a review gate (no `git push` of an unreviewed commit).
 - **CI autopilot**: after an agent pushes, CI is watched; red goes back to the agent to fix (2 tries), green notifies you.
 - **Ticket → agent → worktree → cleanup**: start an agent on a Jira story with one key; clean up worktrees once their PR merges.
+- **Ticket briefs and PR reviews on demand**: `b` on a ticket writes a 5-line brief (repo, files, likely fix); in REVIEWS, `v` gets Claude's review of a PR waiting on you and `A` approves and merges it.
+- **Slack mentions**: who mentioned or DM'd you in the last 24 hours, one line each, one key to the thread.
 - **Slash commands**: `/watch-ci`, `/writeup`, `/tell`, `/learn`, `/handoff`.
 - **Share a PR** to your team's Slack channel in one key, in a consistent template.
 

@@ -13,13 +13,15 @@ from pathlib import Path
 PATH = Path(os.environ.get("MUSTER_CONFIG", str(Path.home() / ".config" / "muster" / "config.toml")))
 
 DEFAULTS = {
-    "github": {"orgs": []},
+    "github": {"orgs": [], "review_repos": []},
     "workspace": {"code_root": "~/Projects", "worktree_glob": "{code_root}/*.worktrees/*",
                   "new_agent": "direct"},  # "direct": dash starts claude; "autoclaude": a herdr plugin does
     "slack": {"share_channel_id": "", "share_channel_name": "", "share_mention": ""},
     "jira": {"jql": "assignee = currentUser() AND issuetype in (Story, Bug) AND statusCategory != Done ORDER BY updated DESC"},
-    "connectors": {"calendar": "mcp__claude_ai_Google_Calendar__", "jira": "mcp__claude_ai_Atlassian_MCP__"},
-    "models": {"fetch": "claude-haiku-5-5", "recap": "claude-haiku-5-5", "share": "claude-haiku-5-5"},
+    "connectors": {"calendar": "mcp__claude_ai_Google_Calendar__", "jira": "mcp__claude_ai_Atlassian_MCP__",
+                   "slack": "mcp__claude_ai_Slack__"},
+    "models": {"fetch": "claude-haiku-5-5", "recap": "claude-haiku-5-5", "share": "claude-haiku-5-5",
+               "brief": "claude-sonnet-5-5", "review": "claude-sonnet-5-5"},
 }
 
 
@@ -57,6 +59,7 @@ ENV_PATH = PATH.parent / ".env"
 # MUSTER_* environment variables (or lines in ~/.config/muster/.env) override config.toml.
 ENV_KEYS = {
     "MUSTER_GITHUB_ORGS": ("github", "orgs"),            # comma-separated
+    "MUSTER_REVIEW_REPOS": ("github", "review_repos"),   # comma-separated owner/name
     "MUSTER_CODE_ROOT": ("workspace", "code_root"),
     "MUSTER_WORKTREE_GLOB": ("workspace", "worktree_glob"),
     "MUSTER_NEW_AGENT": ("workspace", "new_agent"),
@@ -98,7 +101,7 @@ def load() -> dict:
     for key, (sec, name) in ENV_KEYS.items():
         if os.environ.get(key):
             v = os.environ[key]
-            cfg[sec][name] = [x.strip() for x in v.split(",") if x.strip()] if name == "orgs" else v
+            cfg[sec][name] = [x.strip() for x in v.split(",") if x.strip()] if name in ("orgs", "review_repos") else v
     ws = cfg["workspace"]
     ws["code_root"] = os.path.expanduser(ws["code_root"])
     ws["worktree_glob"] = os.path.expanduser(ws["worktree_glob"].replace("{code_root}", ws["code_root"]))

@@ -20,14 +20,17 @@ The Claude status line shows these as `⌥d dash  ⌥e ide  ⌥n fresh`, plus th
 |---|---|---|
 | `Tab` / `Shift+Tab` | anywhere | next / previous section |
 | `↑↓` or `j k` | anywhere | move |
-| `r` or `R` | anywhere | refresh everything (Calendar/Jira take ~20 s) |
+| `r` or `R` | anywhere | refresh everything, Slack mentions included (Calendar/Jira/Slack take ~30 s) |
 | `q` | anywhere | close dash |
 | `o` | any row with a link | open in the browser |
 | `C` | any row | type a prompt about it into the Claude pane in this tab (**not sent**: you review and press Enter) |
 | `a` `e` `space` `d` | TODO | add, edit, tick done, delete (after `y/n`) |
 | `n` | JIRA | start a new agent on the ticket in its own tab and worktree (after `y/n`) |
+| `b` / `v` | JIRA | write a brief on the ticket (repo, files, likely fix, size, open questions; reads only, ~1.5 min) / read it |
 | `s` | PULL REQUESTS | post the PR to your team channel (after `y/n`; needs `slack.share_channel_id`) |
 | `M` | PULL REQUESTS | merge when green, your PRs only (after `y/n`) |
+| `v` | REVIEWS | Claude reviews the PR (verdict, summary, risky spots; ~25 s), then `v` again to read it |
+| `A` | REVIEWS | approve and merge when green (after `y/n`; refused for drafts and red CI) |
 | `c` / `F` | CLEAN UP | remove a merged PR's worktree; `F` first stashes uncommitted changes |
 | `g` `x` `X` | AGENTS | go to the agent; send `/compact`; close it (after `y/n`, resumable) |
 | `w` / `v` | RECAP | write today's recap / view it |
@@ -39,9 +42,10 @@ Every action that changes something asks `y/n` first and refuses when it's unsaf
 - **TODO**: notes in `~/.config/muster/todo.md` (plain markdown, edit it anywhere; shared by every dash).
 - **TODAY / JIRA**: from your claude.ai connectors, fetched in the background (see SPECS.md for timing and cost).
 - **PULL REQUESTS**: your open PRs in `github.orgs`, with CI state.
+- **REVIEWS**: PRs in `github.review_repos` that wait on your review, oldest first, with how long they've waited. Hidden when `review_repos` is empty.
 - **CLEAN UP**: shows only when a worktree's PR has merged.
 - **ARTIFACTS**: your last 5 artifacts created, updated or opened from Claude Code.
-- **SLACK**: unread DMs + mentions, read from the Slack app's Dock badge.
+- **SLACK**: the unread count from the Slack app's Dock badge, then who mentioned or DM'd you in the last 24 hours (bots and your own messages left out); `o` opens the thread.
 - **AGENTS**: every Claude agent in herdr with its exact context %, working/idle, and idle time; stale (idle > 1 day) first.
 - **SPEND**: today / week / month across all Claude sessions (ccusage; API-price estimates).
 - **RECAP**: an end-of-day summary of what each agent did.
