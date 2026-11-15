@@ -30,6 +30,8 @@ READ_TOOLS = [CAL + "list_events", CAL + "search_events", CAL + "get_event", CAL
               SLACK + "slack_search_public_and_private"]
 # The Slack connector can't see read state: mentions are "last 24h", and the unread count still comes from the Dock badge.
 SLACK_URL = re.compile(r"^https://[A-Za-z0-9.-]+\.slack\.com/archives/[A-Za-z0-9]+/p\d+(\?[A-Za-z0-9_=&.%-]*)?$")
+JIRA_KEY = re.compile(r"^[A-Z][A-Z0-9]+-\d+$")
+CAL_URL = re.compile(r"^https://(www\.google\.com/calendar/|calendar\.google\.com/)[^\s]*$")
 CONTROL = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 
 
@@ -83,6 +85,29 @@ def sanitize_slack(items: object) -> list[dict]:
     return out[:5]
 
 
+def sanitize_jira(items: object) -> list[dict]:
+    """Every row must carry a real ticket key; its link must be that ticket on an Atlassian site."""
+    out = []
+    for j in items if isinstance(items, list) else []:
+        if not isinstance(j, dict) or not JIRA_KEY.match(str(j.get("key", ""))):
+            continue
+        key, url = j["key"], str(j.get("url") or "")
+        ok = re.match(r"^https://[A-Za-z0-9.-]+\.atlassian\.net/browse/" + re.escape(key) + "$", url)
+        out.append({"key": key, "title": clean(j.get("title"), 40), "status": clean(j.get("status"), 30), "url": url if ok else None})
+    return out[:6]
+
+
+def sanitize_today(items: object) -> list[dict]:
+    """Meetings: HH:MM start, short title, and a Google Calendar link or none."""
+    out = []
+    for m in items if isinstance(items, list) else []:
+        if not isinstance(m, dict) or not re.match(r"^\d{2}:\d{2}$", str(m.get("start", ""))):
+            continue
+        url = str(m.get("url") or "")
+        out.append({"start": m["start"], "title": clean(m.get("title"), 30), "url": url if CAL_URL.match(url) else None})
+    return out[:4]
+
+
 def extract_json(text: str) -> dict:
     text = text.strip()
     try:
@@ -129,8 +154,9 @@ def main(argv: list[str]) -> int:
                 "updated": time.time(),
                 "took_s": round(time.time() - started, 1),
                 "cost_usd": envelope.get("total_cost_usd"),
-                "today": data.get("today") or [],
-                "jira": data.get("jira") or [],
+                # One run reads Calendar, Jira and Slack, so a crafted message could shape any field: check them all.
+                "today": sanitize_today(data.get("today")),
+                "jira": sanitize_jira(data.get("jira")),
                 # Slack only every SLACK_EVERY, and a failed Slack read keeps the last good list.
                 "slack": sanitize_slack(data["slack"]) if with_slack and data.get("slack") is not None else old.get("slack", []),
                 "slack_updated": started if with_slack and data.get("slack") is not None else old.get("slack_updated", 0),

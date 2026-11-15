@@ -30,7 +30,25 @@ expect("bad timestamp becomes 0", out[1]["ts"], 0.0)
 expect("at most 5 kept", len(out), 5)
 expect("garbage input gives []", sanitize_slack({"oops": 1}), [])
 expect("only the Slack search tool, no send", [t for t in READ_TOOLS if "Slack" in t], ["mcp__claude_ai_Slack__slack_search_public_and_private"])
-from fetch import prompt
+from fetch import prompt, sanitize_jira, sanitize_today
+j = sanitize_jira([
+    {"key": "ABC-1", "title": "fix", "status": "To Do", "url": "https://acme.atlassian.net/browse/ABC-1"},
+    {"key": "ABC-2", "title": "x", "status": "To Do", "url": "https://evil.example/browse/ABC-2"},
+    {"key": "ABC-3", "title": "x", "status": "To Do", "url": "https://acme.atlassian.net/browse/ABC-999"},
+    {"key": "rm -rf ~", "title": "forged", "url": "https://acme.atlassian.net/browse/X-1"},
+])
+expect("jira: real ticket link kept", j[0]["url"], "https://acme.atlassian.net/browse/ABC-1")
+expect("jira: foreign host dropped", j[1]["url"], None)
+expect("jira: link to a different ticket dropped", j[2]["url"], None)
+expect("jira: row without a real key dropped", [x["key"] for x in j], ["ABC-1", "ABC-2", "ABC-3"])
+m = sanitize_today([
+    {"start": "10:30", "title": "standup", "url": "https://www.google.com/calendar/event?eid=abc"},
+    {"start": "11:00", "title": "x", "url": "https://evil.example/calendar"},
+    {"start": "soon", "title": "forged"},
+])
+expect("today: Google Calendar link kept", m[0]["url"], "https://www.google.com/calendar/event?eid=abc")
+expect("today: other links dropped", m[1]["url"], None)
+expect("today: bad start time dropped", len(m), 2)
 expect("prompt without Slack has no Slack part", ("slack_search" in prompt(False), '3. "errors"' in prompt(False)), (False, True))
 expect("prompt with Slack uses a 24h unix cutoff", ('after="' in prompt(True), '4. "errors"' in prompt(True)), (True, True))
 sys.exit(fail)

@@ -2,6 +2,14 @@
 
 All notable changes to Muster. Versions follow [semantic versioning](https://semver.org): breaking changes bump the major, features the minor, fixes the patch.
 
+## 0.2.1 (2026-11-15)
+
+Security fixes from a review of 0.2.0:
+- `A` approves only the commit dash showed: it checks the PR's live head first and merges with `--match-head-commit`, so commits pushed in between are never approved or merged unseen. A review written for an older commit is marked and `v` writes a fresh one.
+- PR reviews wrap the PR's text in a random marker per run, so a PR can't fake the end of its data block to steer the verdict.
+- Jira and Calendar rows from the background fetch are now checked like Slack rows (real ticket keys, Atlassian/Google Calendar links only), since one run reads all three.
+- Terminal control characters are stripped from briefs and reviews.
+
 ## 0.2.0 (2026-11-15)
 
 - **REVIEWS** section: PRs in `github.review_repos` waiting on your review, oldest first. `v` Claude review (verdict, summary, risky spots), `A` approve and merge when green (asks first; refuses drafts and red CI), `o` open.

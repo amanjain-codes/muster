@@ -41,7 +41,7 @@ class Quiet(dash.Dash):
 
 def pr(n, **kw):
     base = dict(kind="review", number=n, title=f"change {n}", url=f"https://github.com/acme/svc/pull/{n}", draft=False,
-                author="dev1", repo="acme/svc", method="SQUASH", asked=time.time() - 2 * 86400,
+                author="dev1", repo="acme/svc", method="SQUASH", asked=time.time() - 2 * 86400, head="abc1234" + "0" * 33,
                 ok=3, fail=0, total=3, first_fail=None)
     return {**base, **kw}
 
@@ -51,7 +51,8 @@ async def main():
     notes = Path(os.environ["HOME"]) / ".cache" / "muster" / "notes"
     notes.mkdir(parents=True)
     dash.brief_path("ABC-1").write_text("# ABC-1: brief\n")
-    dash.review_path("acme/svc", 7).write_text("# acme/svc#7: review\n")
+    dash.review_path("acme/svc", 7).write_text("# acme/svc#7: review\n\n_model · $0.08 · head abc1234" + "0" * 33 + "_\n")
+    dash.review_path("acme/svc", 8).write_text("# acme/svc#8: review\n\n_model · $0.08 · head def5678" + "0" * 33 + "_\n")
 
     app = Quiet()
     async with app.run_test(size=(130, 80)) as pilot:
@@ -84,6 +85,8 @@ async def main():
         expect("n cancels", app.pending, None)
 
         select("review", lambda it: it["p"]["number"] == 8)
+        expect("review of an older commit is flagged", app.review_state(app.items[app.sel]["p"]), "outdated")
+        expect("  ...and offers a fresh one", app.items[app.sel]["hints"].startswith("v review again"), True)
         await pilot.press("A")
         expect("draft PR refused", (app.pending, app.flash), (None, "draft PR; not approving it"))
         select("review", lambda it: it["p"]["number"] == 9)

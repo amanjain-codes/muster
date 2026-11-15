@@ -30,7 +30,7 @@ CTX_DIR = CACHE / "ctx"  # written by ~/.claude/statusline.sh, one file per sess
 COMMS = CACHE / "comms.json"  # written by the (future) Calendar/Jira/Slack fetcher
 sys.path.insert(0, str(Path(__file__).parent))
 from dashconf import CFG  # noqa: E402  per-user settings: ~/.config/muster/config.toml
-from notes import FAILED, KEY_RE, brief_path, review_path  # noqa: E402  b (ticket brief) and v (PR review) write these
+from notes import FAILED, KEY_RE, brief_path, review_head, review_path  # noqa: E402  b (ticket brief) and v (PR review) write these
 
 ORGS = CFG["github"]["orgs"]
 REVIEW_REPOS = CFG["github"]["review_repos"]
@@ -303,7 +303,7 @@ REVIEW_QUERY = """
 query($q: String!) {
   search(query: $q, type: ISSUE, first: 30) {
     nodes { ... on PullRequest {
-      number title url isDraft author { login }
+      number title url isDraft headRefOid author { login }
       repository { nameWithOwner viewerDefaultMergeMethod }
       timelineItems(itemTypes: [REVIEW_REQUESTED_EVENT], last: 1) { nodes { ... on ReviewRequestedEvent { createdAt } } }
       commits(last: 1) { nodes { commit { statusCheckRollup {
@@ -334,7 +334,7 @@ def load_reviews() -> list[dict]:
         asked = dt.datetime.fromisoformat(ev[0]["createdAt"].replace("Z", "+00:00")).timestamp() if ev else None
         out.append(dict(kind="review", number=pr["number"], title=pr["title"], url=pr["url"], draft=pr["isDraft"],
                         author=(pr.get("author") or {}).get("login", ""), repo=pr["repository"]["nameWithOwner"],
-                        method=pr["repository"]["viewerDefaultMergeMethod"], asked=asked,
+                        method=pr["repository"]["viewerDefaultMergeMethod"], asked=asked, head=pr["headRefOid"],
                         ok=ok, fail=fail, total=total, first_fail=first_fail))
     return sorted(out, key=lambda p: p["asked"] or time.time())
 
@@ -777,8 +777,9 @@ class Dash(App):
                 if not self.reviews:
                     t.append("  nothing waiting on your review\n", DIM)
                 for p in self.reviews:
-                    note = self.note_state(review_path(p["repo"], p["number"]))
+                    note = self.review_state(p)
                     badge = {"ready": Text(" ✎ review", GREEN), "writing": Text(" … reviewing", DIM),
+                             "outdated": Text(" ✎ review is for an older commit", ORANGE),
                              "failed": Text(" ✗ review failed", ORANGE)}.get(note, Text(""))
                     waited = Text("")
                     if p["asked"]:
@@ -788,7 +789,7 @@ class Dash(App):
                         ci_label(p) + Text(" ") + (Text("draft ", DIM) if p["draft"] else Text(""))
                         + Text(f"{p['repo'].split('/')[-1]}#{p['number']} ", ACC) + Text(p["title"][:30])
                         + Text(f" @{p['author'][:12]}", DIM) + waited + badge,
-                        ("v read review" if note == "ready" else "v Claude review") + " · A approve + merge · o open")
+                        {"ready": "v read review", "outdated": "v review again"}.get(note, "v Claude review") + " · A approve + merge · o open")
 
         if self.cleanup:
             section("CLEAN UP", f"{len(self.cleanup)} merged, worktree still around", DIM)
@@ -1275,6 +1276,13 @@ class Dash(App):
         with open(path, errors="ignore") as f:
             return "failed" if f.read(len(FAILED)) == FAILED else "ready"
 
+    def review_state(self, p: dict) -> str:
+        """note_state, plus "outdated" when the PR has new commits since the review was written."""
+        state = self.note_state(review_path(p["repo"], p["number"]))
+        if state == "ready" and review_head(review_path(p["repo"], p["number"])) != (p.get("head") or "")[:7]:
+            return "outdated"
+        return state
+
     def start_notes(self, path: Path, args: list[str], msg: str) -> None:
         if self.note_state(path) == "writing":
             return self.say("already on it…")
@@ -1311,7 +1319,7 @@ class Dash(App):
             elif it.get("kind") == "review":
                 p = it["p"]
                 path = review_path(p["repo"], p["number"])
-                state = self.note_state(path)
+                state = self.review_state(p)
                 if state == "writing":
                     return self.say("still reviewing…")
                 if state != "ready":
@@ -1348,15 +1356,23 @@ class Dash(App):
         def last(r: subprocess.CompletedProcess) -> str:
             return (r.stderr.strip().splitlines() or ["unknown error"])[-1][:70]
 
+        # Approve only the commit dash showed: new commits pushed since then haven't been looked at.
+        live = gh("view", "--json", "headRefOid", "--jq", ".headRefOid")
+        if live.returncode != 0:
+            return self.call_from_thread(self.say, "couldn't check the PR: " + last(live))
+        if live.stdout.strip() != p["head"]:
+            self.call_from_thread(self.say, f"#{n} has new commits since dash loaded it; not approving · look again")
+            return self.fetch("reviews")
+        pin = ("--match-head-commit", p["head"])  # the merge fails if the head moves after this point
         r = gh("review", "--approve")
         if r.returncode != 0:
             msg = "approve failed: " + last(r)
         else:
-            m = gh("merge", "--auto", f"--{method}")
+            m = gh("merge", "--auto", f"--{method}", *pin)
             if m.returncode == 0:
                 msg = f"approved #{n} · merges when green"
-            elif all_green(p):  # repo without auto-merge: checks are already green, so merge now
-                m = gh("merge", f"--{method}")
+            elif all_green(p):  # repo without auto-merge: checks were green for this exact commit, so merge now
+                m = gh("merge", f"--{method}", *pin)
                 msg = f"approved and merged #{n}" if m.returncode == 0 else f"approved #{n}; merge failed: " + last(m)
             else:
                 msg = f"approved #{n}; couldn't queue the merge: " + last(m)
