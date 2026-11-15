@@ -2,6 +2,11 @@
 
 All notable changes to Muster. Versions follow [semantic versioning](https://semver.org): breaking changes bump the major, features the minor, fixes the patch.
 
+## 0.3.1 (2026-11-15)
+
+- `install.sh --dry-run` changes nothing (it created `~/.local/share/muster`) and no longer crashes on a machine without `~/.claude/settings.json` or a herdr config.
+- `muster doctor` on a machine without Muster says so in one line, with the install command, instead of listing every check as failed.
+
 ## 0.3.0 (2026-11-15)
 
 - REVIEWS can follow a Slack channel: `slack.review_channel_id` adds every open PR posted there (any repo in `github.orgs`), marked `#`, next to direct requests in `review_repos`, marked `→`. Merged, closed, your own and already-approved PRs are hidden. Links must be github.com PRs in your orgs.

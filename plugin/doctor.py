@@ -146,8 +146,20 @@ def tools(quick: bool) -> None:
     check("CI autopilot", not bad, "no recent errors" if not bad else "errors in autopilot.log", f"tail -40 {log}")
 
 
+MANIFEST = HOME / ".local" / "share" / "muster" / "install-manifest.txt"  # written by install.sh, removed by uninstall
+
+
 def main() -> int:
     quick = "--quick" in sys.argv
+    if not MANIFEST.exists():
+        # Without an install every check below fails, which reads like a broken machine. Say the real thing.
+        repo = Path(__file__).resolve().parent.parent
+        fix = f"{repo}/install.sh" if (repo / "install.sh").exists() else "the one-line install in the README"
+        if "--json" in sys.argv:
+            print(json.dumps([{"name": "Muster installed", "ok": False, "detail": "no install found", "fix": f"Run {fix}"}]))
+        else:
+            print(f" \033[31m✗\033[0m Muster isn't installed on this machine.\n   \033[33m→ Run {fix}\033[0m")
+        return 1
     hooks(); herdr(); commands(); statusline(); fetcher(); tools(quick)
     if "--json" in sys.argv:
         print(json.dumps(results))

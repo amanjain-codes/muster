@@ -34,7 +34,7 @@ backup() {  # backup <file>: copy to <file>.bak-muster-<stamp> and record it for
 record() { [ $DRY -eq 1 ] || echo "$*" >> "$MANIFEST"; }
 
 [ "$(uname)" = "Darwin" ] || { echo "This installer is for macOS."; exit 1; }
-mkdir -p "$STATE"
+[ $DRY -eq 1 ] || mkdir -p "$STATE"  # a dry run changes nothing, not even this folder
 
 # ---------------------------------------------------------------- 1. tools
 say "Checking tools"
@@ -103,9 +103,9 @@ run "mkdir -p '$HOME/.config/herdr' && touch '$HCONF'"
 backup "$HCONF"
 added=0
 python3 - "$REPO/herdr/keys.toml" "$HCONF" "$DRY" <<'EOF' && added=1 || true
-import re, sys
+import os, re, sys
 src, dst, dry = sys.argv[1], sys.argv[2], sys.argv[3] == "1"
-have = open(dst).read()
+have = open(dst).read() if os.path.exists(dst) else ""  # a dry run never creates it
 blocks = re.split(r"\n(?=\[\[keys\.command\]\])", open(src).read())
 new = [b for b in blocks if b.startswith("[[keys.command]]") and re.search(r'command = "([^"]+)"', b).group(1) not in have]
 taken = [k for b in new for k in re.findall(r'"(alt\+\w|prefix\+\w)"', b) if f'"{k}"' in have]
@@ -146,7 +146,7 @@ backup "$SETTINGS"
 python3 - "$SETTINGS" "$HOME/.claude/hooks" "$SL" "$DRY" <<'EOF'
 import json, os, sys
 path, hooks, sl, dry = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4] == "1"
-d = json.load(open(path)); h = d.setdefault("hooks", {})
+d = json.load(open(path)) if os.path.exists(path) else {}; h = d.setdefault("hooks", {})  # absent in a dry run
 want = [("PostToolUse", "Edit|Write|MultiEdit", "verify-gate.sh record", 10), ("Stop", "", "verify-gate.sh stop", 400),
         ("PreToolUse", "Bash", "review-gate.sh", 15), ("PostToolUse", "Bash", "ci-autopilot.sh", 30)]
 added = 0
