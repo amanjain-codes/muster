@@ -471,6 +471,9 @@ def load_pr(repo: str, number: int) -> dict | None:
 
 _log_paths: dict[str, str | None] = {}
 STALE_AFTER = 24 * 3600  # an idle agent untouched this long is flagged stale
+# herdr agent states (idle, working, blocked, done, unknown). "blocked" = waiting on you: a permission prompt or a
+# question. Never type into a busy agent: /compact or /exit + Enter would land in its prompt and could answer it.
+BUSY = {"working", "blocked"}
 
 
 def log_path(sid: str) -> str | None:
@@ -773,12 +776,15 @@ class Dash(App):
         sections: list[tuple[str, str, str]] = []  # (name, note, note style); body lines follow a \x00SEC<n> marker
         now = dt.datetime.now().strftime("%H:%M")
         working_n = sum(1 for a in self.agents if a["status"] == "working")
-        hot = sum(1 for a in self.agents if (a["pct"] or 0) >= 80)
+        blocked_n = sum(1 for a in self.agents if a["status"] == "blocked")
+        hot =sum(1 for a in self.agents if (a["pct"] or 0) >= 80)
         fails = sum(1 for p in self.prs if p["fail"])
 
         # Header: name, a few vitals, time at the right edge.
         head = Text("dash", f"bold {ACC}")
         head.append(f"   {len(self.agents)} agents", DIM)
+        if blocked_n:
+            head.append(f" · {blocked_n} needs you", f"bold {RED}")
         if working_n:
             head.append(f" {SPIN[self.frame % 4]} {working_n} working", f"bold {GREEN}")
         if hot:
@@ -958,13 +964,15 @@ class Dash(App):
         working = sum(1 for a in self.agents if a["status"] == "working")
         now_ts = time.time()
         for a in self.agents:
-            a["stale"] = a["status"] != "working" and a["active"] is not None and now_ts - a["active"] > STALE_AFTER
+            # Waiting on you is never stale: it must not be offered for clean-up, however long it has waited.
+            a["stale"] = a["status"] not in BUSY and a["active"] is not None and now_ts - a["active"] > STALE_AFTER
         stale = sum(1 for a in self.agents if a["stale"])
-        section("AGENTS", f"{len(self.agents)} · {working} working · {len(self.agents) - working} idle"
-                + (f" · {stale} stale (idle >1d)" if stale else ""), ORANGE if stale else DIM)
+        idle_n = len(self.agents) - working - blocked_n
+        section("AGENTS", f"{len(self.agents)} · " + (f"{blocked_n} needs you · " if blocked_n else "") + f"{working} working · {idle_n} idle"
+                + (f" · {stale} stale (idle >1d)" if stale else ""), RED if blocked_n else ORANGE if stale else DIM)
         if not err_or_wait("agents"):
-            # Stale agents first so they're easy to clean up, then the rest by context.
-            shown = sorted(self.agents, key=lambda a: not a["stale"])[:8]
+            # Waiting on you first, then stale ones (easy to clean up), then the rest by context.
+            shown = sorted(self.agents, key=lambda a: (a["status"] != "blocked", not a["stale"]))[:8]
             for a in shown:
                 if a["pct"] is not None:
                     p = a["pct"]
@@ -975,13 +983,19 @@ class Dash(App):
                     meter = Text(f"{a['tokens'] // 1000}k tokens", DIM)
                 else:
                     meter = Text("no data yet", DIM)
-                dot = Text(f"{SPIN[self.frame % 4]} ", f"bold {GREEN}") if a["status"] == "working" else Text("● ", DIM)
                 idle = Text("")
-                if a["status"] != "working" and a["active"]:
-                    idle = Text(f" idle {ago(a['active'])}", f"bold {ORANGE}" if a["stale"] else DIM)
+                if a["status"] == "working":
+                    dot = Text(f"{SPIN[self.frame % 4]} ", f"bold {GREEN}")
+                elif a["status"] == "blocked":
+                    dot = Text("◆ ", f"bold {RED}")
+                    idle = Text(" needs you" + (f" {ago(a['active'])}" if a["active"] else ""), f"bold {RED}")
+                else:
+                    dot = Text("● ", DIM)
+                    if a["active"]:
+                        idle = Text(f" idle {ago(a['active'])}", f"bold {ORANGE}" if a["stale"] else DIM)
                 row(dict(sec="AGENTS", kind="agent", a=a),
                     dot + Text(f"{a['ws'][:9]:<9} ", f"bold {YELLOW}") + meter + Text(f"  {a['label'][:22]}", DIM) + idle,
-                    "g go · x /compact · X close · C Claude")
+                    "g answer it · C Claude" if a["status"] == "blocked" else "g go · x /compact · X close · C Claude")
             more = len(self.agents) - len(shown)
             if more > 0:
                 t.append(f"  +{more} more\n", DIM)
@@ -1285,6 +1299,8 @@ class Dash(App):
         if not it or it["kind"] != "agent":
             return
         a = it["a"]
+        if a["status"] == "blocked":
+            return self.say(f"{a['ws']} is waiting on you · g to answer it")
         if a["status"] == "working":
             return self.say("that agent is working; not closing it")
         self.pending = dict(kind="close", a=a, question=f"Close {a['ws']} · {a['label'][:24]}? (resumable later)")
@@ -1360,8 +1376,8 @@ class Dash(App):
         notes = []
         for a in self.agents:
             if a["cwd"] == w["path"] or a["cwd"].startswith(w["path"] + "/"):
-                if a["status"] == "working" or input_text(a["pane"]):
-                    return self.say(f"its agent ({a['ws']}) is busy or has a draft; not cleaned up")
+                if a["status"] in BUSY or input_text(a["pane"]):
+                    return self.say(f"its agent ({a['ws']}) is busy, waiting on you or has a draft; not cleaned up")
                 subprocess.run([HERDR, "pane", "send-text", a["pane"], "/exit"], capture_output=True)
                 subprocess.run([HERDR, "pane", "send-keys", a["pane"], "Enter"], capture_output=True)
                 notes.append("agent closed")
@@ -1592,6 +1608,8 @@ class Dash(App):
         if not it or it["kind"] != "agent":
             return
         a = it["a"]
+        if a["status"] == "blocked":
+            return self.say(f"{a['ws']} is waiting on you · g to answer it")
         if a["status"] == "working":
             return self.say(f"{a['ws']} is working; compact it when it's idle")
         if self.input_has_text(a["pane"]):

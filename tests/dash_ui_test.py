@@ -206,6 +206,31 @@ async def main():
         expect("queue: no checks yet waits", step(n(), t0 + 60), "wait")
         expect("queue: still no checks after 10 min: repo has no CI, merges", step(n(), t0 + 11 * 60), "merge")
 
+        # --- an agent waiting on you (herdr "blocked": a permission prompt or question) is not idle ---
+        def agent(pane, status, active, label):
+            return dict(pane=pane, tab="t", ws_id="w", ws=f"ws{pane[1:]}", cwd=f"/code/{pane}", label=label, status=status,
+                        pct=40, tokens=None, active=active)
+        app.reviews = []
+        app.agents = [agent("p1", "idle", now - 600, "idle one"), agent("p2", "working", now, "busy one"),
+                      agent("p3", "blocked", now - 2 * 86400, "asks you"), agent("p4", "idle", now - 2 * 86400, "old one")]
+        app.render_view()
+        s = app.screen_text
+        lines = [l for l in s.splitlines() if "ws" in l and ("one" in l or "asks" in l)]
+        expect("AGENTS note counts who needs you", "4 · 1 needs you · 1 working · 2 idle · 1 stale (idle >1d)" in s, True)
+        expect("header says someone needs you", "1 needs you" in s.splitlines()[0], True)
+        expect("blocked agent listed first", "asks you" in lines[0], True)
+        expect("blocked row says so", "needs you" in lines[0] and "idle" not in lines[0], True)
+        expect("blocked is never stale, however long it waits", next(a for a in app.agents if a["pane"] == "p3")["stale"], False)
+        select("agent", lambda it: it["a"]["pane"] == "p3")
+        expect("blocked hint points at g", app.items[app.sel]["hints"].startswith("g answer it"), True)
+        await pilot.press("x")
+        expect("x refused on a blocked agent (would type into its prompt)", app.flash, "ws3 is waiting on you · g to answer it")
+        await pilot.press("X")
+        expect("X refused on a blocked agent", (app.pending, app.flash), (None, "ws3 is waiting on you · g to answer it"))
+        app.say("")
+        app.do_cleanup(dict(path="/code/p3", branch="b"))
+        expect("clean-up refuses a worktree whose agent is waiting on you", app.flash, "its agent (ws3) is busy, waiting on you or has a draft; not cleaned up")
+
 
 asyncio.run(main())
 sys.exit(fail)

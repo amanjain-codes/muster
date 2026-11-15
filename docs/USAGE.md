@@ -32,7 +32,7 @@ The Claude status line shows these as `⌥d dash  ⌥e ide  ⌥n fresh`, plus th
 | `v` | REVIEWS | Claude reviews the PR (verdict, summary, risky spots; ~25 s), then `v` again to read it |
 | `A` | REVIEWS | approve this exact commit and merge when green (after `y/n`; refused for drafts, red CI and a Claude review of an older commit). If CI is still running, dash merges it later, while dash is running, and only if no new commits arrived |
 | `c` / `F` | CLEAN UP | remove a merged PR's worktree; `F` first stashes uncommitted changes |
-| `g` `x` `X` | AGENTS | go to the agent; send `/compact`; close it (after `y/n`, resumable) |
+| `g` `x` `X` | AGENTS | go to the agent; send `/compact`; close it (after `y/n`, resumable). `x` and `X` are refused while it waits on you |
 | `w` / `v` | RECAP | write today's recap / view it |
 
 Every action that changes something asks `y/n` first and refuses when it's unsafe (agent busy, text in its input box, uncommitted changes).
@@ -46,7 +46,7 @@ Every action that changes something asks `y/n` first and refuses when it's unsaf
 - **CLEAN UP**: shows only when a worktree's PR has merged.
 - **ARTIFACTS**: your last 5 artifacts created, updated or opened from Claude Code.
 - **SLACK**: the unread count from the Slack app's Dock badge, then who mentioned or DM'd you in the last 24 hours (bots and your own messages left out); `o` opens the thread.
-- **AGENTS**: every Claude agent in herdr with its exact context %, working/idle, and idle time; stale (idle > 1 day) first.
+- **AGENTS**: every Claude agent in herdr with its exact context %, working/idle, and idle time. Agents waiting on you (a permission prompt or a question) show a red `◆ needs you` and come first, then stale ones (idle > 1 day); the header counts them too.
 - **SPEND**: today / week / month across all Claude sessions (ccusage; API-price estimates).
 - **RECAP**: an end-of-day summary of what each agent did.
 - **DOCTOR**: appears only when a health check fails, with the fix.
