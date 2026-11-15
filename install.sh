@@ -58,7 +58,8 @@ UV="$(command -v uv || echo uv)"; HERDR="$(command -v herdr || echo "$HOME/.loca
 # ---------------------------------------------------------------- 2. dash plugin
 say "Installing the dash plugin to ${MUSTER_DIR/#$HOME/~}"
 run "mkdir -p '$MUSTER_DIR'"
-run "cp '$REPO'/plugin/* '$MUSTER_DIR'/"
+# Files only: a test run leaves plugin/__pycache__, and cp on a folder fails the install under set -e.
+run "find '$REPO/plugin' -maxdepth 1 -type f ! -name '*.pyc' -exec cp {} '$MUSTER_DIR'/ \\;"
 run "sed -i '' 's#@UV@#$UV#' '$MUSTER_DIR/herdr-plugin.toml'"
 run "chmod +x '$MUSTER_DIR'/*.sh '$MUSTER_DIR'/*.py"
 record "dir $MUSTER_DIR"
@@ -158,8 +159,9 @@ if "statusLine" not in d:
     d["statusLine"] = {"type": "command", "command": sl}; msg += "; status line set"
 elif sl not in json.dumps(d["statusLine"]):
     msg += f"; you already have a status line, kept it (to use dash's: set statusLine.command to {sl})"
-if not dry:
-    tmp = path + ".tmp"; json.dump(d, open(tmp, "w"), indent=2); os.replace(tmp, path)
+changed = bool(added) or "status line set" in msg
+if changed and not dry:  # leave the file byte-for-byte alone when nothing changed
+    tmp = path + ".tmp"; json.dump(d, open(tmp, "w"), indent=2, ensure_ascii=False); os.replace(tmp, path)
 print("  \033[32m✓\033[0m " + msg)
 EOF
 record "settings $SETTINGS"
