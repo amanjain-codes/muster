@@ -1,0 +1,35 @@
+# Ghostty config for Muster. install.sh --with-ghostty installs it to
+# ~/.config/ghostty/config (backing up any existing file first).
+
+# Theme: built into Ghostty. dash and the status line use the terminal palette, so they follow it.
+theme = Everforest Dark Hard
+
+# Nerd Font: the status line and dash use a few symbol glyphs. (brew install --cask font-fira-code-nerd-font)
+font-family = FiraCode Nerd Font Mono
+font-size = 16
+font-thicken = false
+font-feature = -calt
+font-feature = -liga
+adjust-cell-height = 10%
+
+window-padding-x = 6
+window-padding-y = 3
+window-padding-balance = true
+
+# LEFT Option acts as Alt, so herdr's alt+d / alt+e / alt+n work. Right Option still types accents.
+macos-option-as-alt = left
+
+macos-titlebar-proxy-icon = hidden
+macos-titlebar-style = transparent
+title = " "
+
+# Readability
+foreground = #e8eaed
+minimum-contrast = 4.5
+unfocused-split-opacity = 0.7
+
+# Open herdr in the first window; install.sh fills in the path.
+initial-command = @HERDR@
+
+keybind = ctrl+tab=unbind
+keybind = ctrl+shift+tab=unbind

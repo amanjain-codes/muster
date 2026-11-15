@@ -1,0 +1,27 @@
+id = "muster"
+name = "Muster"
+version = "0.1.0"
+min_herdr_version = "0.9.0"
+description = "Lean dev dashboard pane (PRs/CI, agents and context, spend; Calendar/Jira/Slack once a fetcher exists) plus an editor-layout toggle."
+platforms = ["macos"]
+
+[[panes]]
+id = "dash"
+title = "dash"
+placement = "split"
+command = ["@UV@", "run", "--quiet", "--script", "dash.py"]
+
+[[actions]]
+id = "toggle"
+title = "Toggle dash pane"
+command = ["/bin/zsh", "toggle.sh"]
+
+[[actions]]
+id = "handoff"
+title = "Fresh session with context (handoff)"
+command = ["/bin/zsh", "handoff.sh"]
+
+[[actions]]
+id = "editor"
+title = "Toggle editor layout (fresh)"
+command = ["/bin/zsh", "editor.sh"]

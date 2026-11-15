@@ -1,0 +1,18 @@
+# Personal settings and secrets never go in the repo
+.env
+*.env
+!config/.env.example
+config.toml
+!config/config.example.toml
+
+# Test scratch output
+tests/rg/
+tests/repo/
+tests/vg/
+tests/n*
+
+# OS / editor
+.DS_Store
+__pycache__/
+*.pyc
+tests/hooktmp/

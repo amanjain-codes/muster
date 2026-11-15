@@ -1,0 +1,25 @@
+{
+  "theme": "everforest-dark-hard",
+  "file_explorer": {
+    "show_hidden": true,
+    "show_gitignored": true
+  },
+  "version": 3,
+  "active_keybinding_map": "vscode",
+  "plugins": {
+    "vi_mode": {
+      "enabled": true,
+      "settings": {
+        "autoStart": false,
+        "arrowKeys": true,
+        "searchWordUnderCursor": true
+      }
+    },
+    "welcome_screen": {
+      "enabled": true,
+      "settings": {
+        "showOnStartup": true
+      }
+    }
+  }
+}

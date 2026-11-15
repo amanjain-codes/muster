@@ -1,0 +1,13 @@
+# Everforest Dark Hard for herdr: matches Ghostty's built-in "Everforest Dark Hard" theme.
+# install.sh --with-theme merges this into ~/.config/herdr/config.toml (after a backup).
+[theme]
+name = "gruvbox"
+auto_switch = false
+
+[theme.custom]
+accent = "#7fbbb3"
+mauve = "#7fbbb3"
+yellow = "#7fbbb3"
+sidebar_bg = "#232a2e"
+active_row_bg = "#2e383c"
+selection_bg = "#3c4841"

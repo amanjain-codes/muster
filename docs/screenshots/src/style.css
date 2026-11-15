@@ -1,0 +1,13 @@
+/* Shared look for the README screenshots: Everforest Dark Hard, JetBrains-style mono. Sample data only. */
+body{margin:0;background:#1e2326}
+.win{font-family:"FiraCode Nerd Font Mono","JetBrains Mono",Menlo,monospace;font-size:13px;line-height:19px;color:#d3c6aa;background:#272e33;border-radius:10px;overflow:hidden;border:1px solid #3d484d}
+.bar{height:30px;background:#232a2e;display:flex;align-items:center;gap:7px;padding:0 12px}
+.dot{width:11px;height:11px;border-radius:6px;display:inline-block}
+.l{white-space:pre;overflow:hidden;text-overflow:ellipsis}
+.d{color:#859289}.a{color:#7fbbb3}.g{color:#a7c080}.y{color:#dbbc7f}.o{color:#e69875}.r{color:#e67e80}.q{color:#83c092}.p{color:#d699b6}.b{font-weight:700}.w{color:#e8dcc0}
+.rail{display:flex;align-items:center;gap:8px;margin-top:12px}
+.rail .n{font-weight:700;white-space:pre}.rail .c{color:#859289;white-space:pre}.rail .line{flex:1;border-top:1px solid #3d484d}
+.chip{background:#83c092;color:#232a2e;padding:0 6px;font-weight:700}
+.pane{border:1px solid #4f585e;position:relative;box-sizing:border-box;padding:12px 12px 8px}
+.pane.on{border-color:#7fbbb3}
+.lbl{position:absolute;top:-10px;left:10px;background:#272e33;padding:0 6px;white-space:pre}

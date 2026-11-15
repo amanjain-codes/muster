@@ -1,0 +1,14 @@
+#!/bin/bash
+# Fake `gh` for CI autopilot tests. Scenario in $FAKE_SCENARIO; call count in $FAKE_STATE.
+n=$(( $(cat "$FAKE_STATE" 2>/dev/null || echo 0) + 1 )); echo $n > "$FAKE_STATE"
+case "$1 $2" in
+  "pr view") echo 412; exit 0 ;;
+  "repo view") echo "acme/svc"; exit 0 ;;
+esac
+case "$FAKE_SCENARIO" in
+  green)  [ $n -lt 2 ] && echo '[{"name":"build","bucket":"pending"},{"name":"lint","bucket":"pass"}]' \
+                       || echo '[{"name":"build","bucket":"pass"},{"name":"lint","bucket":"pass"}]' ;;
+  red)    echo '[{"name":"build","bucket":"pass"},{"name":"e2e","bucket":"fail"},{"name":"bot","bucket":"pending"}]' ;;
+  stuck)  echo '[{"name":"build","bucket":"pass"},{"name":"review-bot","bucket":"pending"}]' ;;
+esac
+exit 8

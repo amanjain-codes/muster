@@ -1,0 +1,42 @@
+#!/bin/bash
+# muster: one command for the Muster agentic terminal.
+set -euo pipefail
+# Follow the ~/.local/bin/muster symlink (possibly relative, possibly chained) back to the repo.
+SELF="$0"
+while [ -L "$SELF" ]; do t="$(readlink "$SELF")"; case "$t" in /*) SELF="$t" ;; *) SELF="$(dirname "$SELF")/$t" ;; esac; done
+REPO="$(cd "$(dirname "$SELF")/.." && pwd)"
+INSTALLED="${MUSTER_DIR:-$HOME/.local/share/muster/dash}"
+doctor_py() { [ -f "$INSTALLED/doctor.py" ] && echo "$INSTALLED/doctor.py" || echo "$REPO/plugin/doctor.py"; }
+
+case "${1:-help}" in
+  doctor)    shift; exec python3 "$(doctor_py)" "$@" ;;
+  update)
+    shift; before="$(cat "$REPO/VERSION")"
+    git -C "$REPO" pull --ff-only --quiet || { echo "update failed: local changes in $REPO? (git -C $REPO status)"; exit 1; }
+    "$REPO/install.sh" --yes "$@"
+    echo "muster $before → $(cat "$REPO/VERSION")" ;;
+  install)   shift; exec "$REPO/install.sh" "$@" ;;
+  uninstall) shift; exec "$REPO/uninstall.sh" "$@" ;;
+  test)      exec "$REPO/tests/run_all.sh" ;;
+  version|-v|--version) echo "muster $(cat "$REPO/VERSION") ($(git -C "$REPO" rev-parse --short HEAD 2>/dev/null || echo local))" ;;
+  config)    exec "${EDITOR:-open}" "$HOME/.config/muster/config.toml" ;;
+  trust)
+    shift; d="$(cd "${1:-.}" && pwd)"; f="$HOME/.config/muster/trusted-roots"; mkdir -p "$(dirname "$f")"
+    grep -qxF "$d" "$f" 2>/dev/null && echo "already trusted: $d" || { echo "$d" >> "$f"; echo "trusted: $d (the verify gate will run its build/tests)"; } ;;
+  help|-h|--help|*)
+    cat <<EOF
+muster $(cat "$REPO/VERSION"): the agentic terminal
+
+  muster doctor [--quick]   check every part, with a fix for anything broken
+  muster update             pull the latest version and re-install (safe, idempotent)
+  muster config             open your settings (~/.config/muster/config.toml)
+  muster trust [dir]        let the verify gate run build/tests in this folder (default: current)
+  muster install [flags]    run the installer (--with-theme, --dry-run, ...)
+  muster uninstall [--purge] undo the install and restore your configs
+  muster test               run the test suite
+  muster version
+
+In the terminal: ⌥d dashboard · ⌥e editor · ⌥n fresh session. Docs: $REPO/docs
+EOF
+    ;;
+esac

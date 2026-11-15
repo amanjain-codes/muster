@@ -1,0 +1,59 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="style.css"></head><body style="padding:20px">
+<div class="win" style="width:1400px;height:820px;display:flex;flex-direction:column">
+  <div class="bar"><span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span><span class="dot" style="background:#28c840"></span></div>
+  <div style="flex:1;display:flex;min-height:0">
+    <div style="width:230px;background:#232a2e;padding:8px 10px">
+      <div class="l b w" style="margin-bottom:10px">spaces</div>
+      <div class="l"><span class="y">o</span> api</div><div class="l d">  ~/Projects/acme</div>
+      <div class="l"><span class="y">o</span> web</div><div class="l d">  ~/Projects/acme</div>
+      <div class="l" style="background:#2e383c"><span class="g">√</span> <span class="y b">infra</span></div><div class="l d" style="background:#2e383c">  ~/Projects/acme</div>
+      <div class="l"><span class="y">o</span> docs</div><div class="l d">  ~/Projects/acme</div>
+      <div class="l b w" style="margin-top:22px">agents</div>
+      <div class="l"><span class="g">◑</span> <span class="y b">infra</span> · retry export job</div><div class="l d">  claude</div>
+      <div class="l"><span class="d">●</span> <span class="y b">api</span> · rate limit tests</div><div class="l d">  claude</div>
+      <div class="l"><span class="d">●</span> <span class="y b">web</span> · table filters</div><div class="l d">  claude</div>
+    </div>
+    <div style="flex:1;display:flex;flex-direction:column;padding:6px 8px 8px;min-width:0">
+      <div style="display:flex;gap:8px"><span style="background:#2e383c;padding:0 10px" class="d">1 · terraform plan</span><span class="chip" style="padding:0 10px">2 · retry export job</span></div>
+      <div style="flex:1;display:flex;gap:8px;margin-top:12px;min-height:0">
+        <div class="pane" style="flex:1;display:flex;flex-direction:column;min-width:0"><span class="lbl a"> retry export job </span>
+          <div class="l"><span class="a">●</span> <span class="b">Edit</span>(<span class="d">api/export/job.go</span>)</div>
+          <div class="l d">  ⎿  Added retry with backoff (3 attempts)</div>
+          <div class="l"> </div>
+          <div class="l"><span class="o">●</span> <span class="b">verify-gate</span>: <span class="d">go build ./export · go test ./export</span></div>
+          <div class="l d">  ⎿  ok  acme/api/export  0.41s</div>
+          <div class="l"> </div>
+          <div class="l"><span class="w">●</span> <span class="b">Done.</span> Retries now back off 1s → 2s → 4s;</div>
+          <div class="l">  tests pass. Ready for review.</div>
+          <div style="flex:1"></div>
+          <div class="l" style="border-top:1px solid #4f585e;border-bottom:1px solid #4f585e;padding:4px 0">❯ <span style="background:#e69875"> </span></div>
+          <div class="l" style="padding-top:4px"><span class="a">Opus</span>  <span class="y">api</span>  <span class="g">▰▰▱▱▱▱▱▱▱▱ 21%</span>  <span class="p">$2.10</span>  <span style="background:#83c092;color:#232a2e"> ⌥d dash </span> <span style="background:#83c092;color:#232a2e"> ⌥e ide </span> <span style="background:#83c092;color:#232a2e"> ⌥n fresh </span></div>
+        </div>
+        <div class="pane on" style="width:590px;min-width:0"><span class="lbl a b"> dash </span>
+          <div class="l"><span class="a b">dash</span><span class="d">   3 agents</span> <span class="g b">◑ 1 working</span><span class="d"> · CI </span><span class="g b">✓</span><span class="d"> · today </span><span class="p">$12.40</span>                 <span class="d">13:36</span></div>
+          <div class="rail"><span class="n">TODO</span><span class="line"></span><span class="c">1 open · a add</span></div>
+          <div class="l">  <span class="y">○</span> reply to the design review comments</div>
+          <div class="rail"><span class="n">TODAY</span><span class="line"></span><span class="c">2m ago</span></div>
+          <div class="l">  <span class="o">15:00</span>  Sprint planning</div>
+          <div class="rail"><span class="n">JIRA</span><span class="line"></span><span class="c">assigned to me, not done</span></div>
+          <div class="l"><span class="a b">▸ ACME-142</span> <span class="p">Ready for dev</span>  <span class="b">Retry failed export jobs</span></div>
+          <div class="l">  <span class="a">ACME-138</span> <span class="o">Reopened</span>       Table filter loses state</div>
+          <div class="rail"><span class="n">PULL REQUESTS</span><span class="line"></span><span class="c">acme</span></div>
+          <div class="l">  <span class="g">✓ 12/12</span>      <span class="a">api#451</span> add retry to export job <span class="y b">✦ s share</span></div>
+          <div class="l">  <span class="y">● 3/8</span>        <span class="a">web#212</span> keep filters in the URL</div>
+          <div class="rail"><span class="n">ARTIFACTS</span><span class="line"></span><span class="c">recent, from Claude Code</span></div>
+          <div class="l">  Release plan Q3                  <span class="d">updated 4m ago</span></div>
+          <div class="l">  Export job retry design           <span class="d">updated 1d ago</span></div>
+          <div class="rail"><span class="n">SLACK</span><span class="line"></span><span class="c">from the Slack app badge</span></div>
+          <div class="l">  <span class="o b">2</span> unread DMs + mentions</div>
+          <div class="rail"><span class="n">AGENTS</span><span class="line"></span><span class="c">3 · 1 working · 2 idle</span></div>
+          <div class="l">  <span class="g b">◑</span> <span class="y b">infra    </span> <span class="g b"> 21%</span> <span class="g">▰▱▱▱▱▱</span>  <span class="d">retry export job</span></div>
+          <div class="l">  <span class="d">●</span> <span class="y b">api      </span> <span class="y b"> 64%</span> <span class="y">▰▰▰▰▱▱</span>  <span class="d">rate limit tests  idle 12m</span></div>
+          <div class="l">  <span class="d">●</span> <span class="y b">web      </span> <span class="g b">  8%</span> <span class="g">▰▱▱▱▱▱</span>  <span class="d">table filters  idle 1h</span></div>
+          <div class="rail"><span class="n">SPEND</span><span class="line"></span><span class="c">all Claude sessions</span></div>
+          <div class="l">  <span class="d">today</span> <span class="p">$12.40</span> <span class="d">· week</span> <span class="p">$61.20</span> <span class="d">· month</span> <span class="p">$188.00</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div></body></html>

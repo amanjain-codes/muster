@@ -1,0 +1,34 @@
+# Appended to ~/.config/herdr/config.toml by install.sh (only the bindings not already there).
+# Alt = the LEFT Option key in Ghostty (macos-option-as-alt = left). If a key clashes with one of
+# your own bindings, change it here and in claude/statusline.sh.
+
+[[keys.command]]
+key = ["prefix+d", "alt+d"]
+type = "plugin_action"
+command = "muster.toggle"
+description = "dash: open/close the dashboard split"
+
+[[keys.command]]
+key = ["prefix+e", "alt+e"]
+type = "plugin_action"
+command = "muster.editor"
+description = "ide: fresh full screen in its own tab, press again to go back"
+
+[[keys.command]]
+key = ["prefix+n", "alt+n"]
+type = "plugin_action"
+command = "muster.handoff"
+description = "fresh session: handoff note, /clear, continue from the note"
+
+# IDE plugins (installed by install.sh from their GitHub repos, MIT-licensed)
+[[keys.command]]
+key = ["prefix+f", "alt+f"]
+type = "plugin_action"
+command = "herdr-file-viewer.open-file-viewer"
+description = "file viewer: tree + diffs + rendered markdown"
+
+[[keys.command]]
+key = ["prefix+r", "alt+r"]
+type = "plugin_action"
+command = "persiyanov.reviewr.toggle"
+description = "reviewr: diff of the agent's changes beside the chat"

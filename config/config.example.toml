@@ -1,0 +1,37 @@
+# dash settings. The installer copies this to ~/.config/muster/config.toml (never overwriting an existing one).
+# Every value can also be overridden by a MUSTER_* variable in ~/.config/muster/.env (see .env.example).
+
+[github]
+# GitHub orgs whose PRs you author show in PULL REQUESTS. Empty = all orgs.
+orgs = ["your-github-org"]
+
+[workspace]
+# Where your repos live. New ticket agents (n in JIRA) start here.
+code_root = "~/Projects"
+# Where git worktrees live; CLEAN UP lists the ones whose PR has merged.
+worktree_glob = "{code_root}/*.worktrees/*"
+# "direct": dash starts `claude` in the new tab itself.
+# "autoclaude": another herdr plugin of yours starts Claude in new tabs; dash only briefs it.
+new_agent = "direct"
+
+[slack]
+# Where `s` on a PR posts the announcement. Leave the id empty to turn sharing off.
+# Channel id: open the channel in Slack > channel name > bottom of the About tab ("Channel ID").
+share_channel_id = ""
+share_channel_name = "#your-team"
+# Who to tag. A user group: "<!subteam^S0123456789>" (the group's id); a person: "<@U0123456789>"; or "".
+share_mention = ""
+
+[jira]
+jql = "assignee = currentUser() AND issuetype in (Story, Bug) AND statusCategory != Done ORDER BY updated DESC"
+
+[connectors]
+# Tool-name prefixes of your claude.ai connectors (check with `claude mcp list` or /mcp in Claude Code).
+calendar = "mcp__claude_ai_Google_Calendar__"
+jira = "mcp__claude_ai_Atlassian_MCP__"
+
+[models]
+# Small, cheap models are enough for these background jobs.
+fetch = "claude-haiku-5-5"
+recap = "claude-haiku-5-5"
+share = "claude-haiku-5-5"

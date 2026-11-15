@@ -1,0 +1,36 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="style.css">
+<style>.n{color:#7a8478;display:inline-block;width:36px;text-align:right;margin-right:14px}</style></head><body style="padding:20px">
+<div class="win" style="width:1200px;height:640px;display:flex;flex-direction:column">
+  <div class="bar"><span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span><span class="dot" style="background:#28c840"></span></div>
+  <div style="display:flex;gap:8px;padding:4px 10px"><span style="background:#2e383c;padding:0 10px" class="d">1 · retry export job</span><span class="chip" style="padding:0 10px">2 · ide</span><span style="flex:1"></span><span class="d">⌥e back to your agent</span></div>
+  <div style="flex:1;margin:6px 10px 10px;border:1px solid #7fbbb3;display:flex;flex-direction:column;min-height:0">
+    <div class="l" style="padding:2px 10px;background:#2e383c">fresh › export/job.go — api</div>
+    <div class="l d" style="padding:2px 10px">File  Edit  View  Selection  Go  LSP  Explorer  Help</div>
+    <div style="flex:1;display:flex;min-height:0">
+      <div style="width:260px;border-right:1px solid #4f585e;padding:6px 10px">
+        <div class="l b w">File Explorer</div>
+        <div class="l">▾ api</div><div class="l o">  › cmd</div><div class="l o">  ▾ export</div>
+        <div class="l" style="background:#3c4841">      job.go</div><div class="l">      job_test.go</div>
+        <div class="l o">  › internal</div><div class="l">    go.mod</div><div class="l">    README.md</div>
+      </div>
+      <div style="flex:1;padding:6px 10px;min-width:0">
+        <div class="l"><span class="n">1</span><span class="p">package</span> export</div>
+        <div class="l"><span class="n">2</span></div>
+        <div class="l"><span class="n">3</span><span class="p">import</span> <span class="g">"time"</span></div>
+        <div class="l"><span class="n">4</span></div>
+        <div class="l"><span class="n">5</span><span class="d">// Run retries a failed export with backoff: 1s, 2s, 4s.</span></div>
+        <div class="l"><span class="n">6</span><span class="p">func</span> <span class="g">Run</span>(job <span class="y">Job</span>) <span class="y">error</span> {</div>
+        <div class="l"><span class="n">7</span>    <span class="p">var</span> err <span class="y">error</span></div>
+        <div class="l"><span class="n">8</span>    <span class="p">for</span> attempt := <span class="o">0</span>; attempt &lt; <span class="o">3</span>; attempt++ {</div>
+        <div class="l"><span class="n">9</span>        <span class="p">if</span> err = job.<span class="g">Export</span>(); err == <span class="o">nil</span> {</div>
+        <div class="l"><span class="n">10</span>            <span class="p">return</span> <span class="o">nil</span></div>
+        <div class="l"><span class="n">11</span>        }</div>
+        <div class="l"><span class="n">12</span>        time.<span class="g">Sleep</span>(time.Second &lt;&lt; attempt)</div>
+        <div class="l"><span class="n">13</span>    }</div>
+        <div class="l"><span class="n">14</span>    <span class="p">return</span> err</div>
+        <div class="l"><span class="n">15</span>}</div>
+      </div>
+    </div>
+    <div class="l d" style="padding:2px 10px;background:#2e383c">Ln 8, Col 5 · LF · UTF-8 · Go</div>
+  </div>
+</div></body></html>
