@@ -15,4 +15,10 @@ mkdir -p "$T/.local/share/muster" && touch "$T/.local/share/muster/install-manif
 out=$(HOME="$T" python3 "$D/../plugin/doctor.py" --quick 2>&1)
 expect "installed: no 'not installed' line" "$(grep -c "isn't installed" <<<"$out")" "0"
 expect "installed: runs the real checks" "$([ "$(grep -cE '✓|✗' <<<"$out")" -gt 5 ] && echo yes || echo no)" "yes"
+trust_ok() { HOME="$T" python3 "$D/../plugin/doctor.py" --quick --json | python3 -c 'import json,sys; print(next(r["ok"] for r in json.load(sys.stdin) if r["name"] == "verify gate trust"))'; }
+mkdir -p "$T/.config/muster" "$T/code/repo/.git"
+printf '# comment\n%s\n' "$T/code" > "$T/.config/muster/trusted-roots"
+expect "trust: an old folder entry is flagged" "$(trust_ok)" "False"
+printf '%s\n' "$T/code/repo" > "$T/.config/muster/trusted-roots"
+expect "trust: a repo entry is fine" "$(trust_ok)" "True"
 exit $fail

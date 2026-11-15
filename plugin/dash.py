@@ -15,6 +15,7 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -410,6 +411,64 @@ def all_green(p: dict) -> bool:
     return bool(p["total"]) and p["ok"] == p["total"]
 
 
+# `A` while CI is still running: dash keeps the merge itself instead of GitHub's auto-merge, which stays on when
+# someone with write access pushes, so a commit you never saw could merge under your approval.
+MERGE_QUEUE = CACHE / "merge-queue.json"
+MERGE_GIVE_UP = 3 * 86400  # CI not green after this long: drop the queued merge
+NO_CI_AFTER = 600  # no checks at all this long after approving: the repo has no CI
+MERGE_METHODS = {"merge", "squash", "rebase"}
+_queue_lock = threading.Lock()
+
+
+def read_queue() -> list[dict]:
+    try:
+        q = json.loads(MERGE_QUEUE.read_text())
+        return q if isinstance(q, list) else []
+    except (OSError, ValueError):
+        return []
+
+
+def write_queue(q: list[dict]) -> None:
+    CACHE.mkdir(parents=True, exist_ok=True)
+    tmp = MERGE_QUEUE.with_suffix(".tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    os.fchmod(fd, 0o600)
+    with os.fdopen(fd, "w") as f:
+        json.dump(q, f)
+    os.replace(tmp, MERGE_QUEUE)
+
+
+def merge_step(e: dict, pr: dict | None, now: float) -> tuple[str, str]:
+    """What to do with one queued merge: ("merge" | "wait" | "drop", message for the user)."""
+    tag = f"{e['repo'].split('/')[-1]}#{e['number']}"
+    waited = now - e["at"]
+    if waited > MERGE_GIVE_UP:
+        return "drop", f"{tag}: CI not green after 3 days; dropped the queued merge"
+    if not pr:
+        return "wait", ""  # couldn't read it right now; try again next refresh
+    if pr.get("state") != "OPEN":
+        return "drop", ""
+    if pr.get("headRefOid") != e["head"]:
+        return "drop", f"{tag} got new commits after you approved; not merging · review again"
+    ok, fail, total, first_fail = check_summary(pr)
+    if fail:
+        return "drop", f"CI went red on {tag} ({first_fail}); not merging"
+    if (total and ok == total) or (not total and waited > NO_CI_AFTER):
+        return "merge", ""
+    return "wait", ""
+
+
+def load_pr(repo: str, number: int) -> dict | None:
+    m = PR_URL.match(f"https://github.com/{repo}/pull/{int(number)}")
+    if not m:
+        return None
+    q = f'query {{ r: repository(owner: "{m.group(1)}", name: "{m.group(2)}") {{ pullRequest(number: {int(number)}) {{{PR_FIELDS} }} }} }}'
+    try:
+        return (graphql(q).get("r") or {}).get("pullRequest")
+    except Exception:
+        return None
+
+
 _log_paths: dict[str, str | None] = {}
 STALE_AFTER = 24 * 3600  # an idle agent untouched this long is flagged stale
 
@@ -606,6 +665,7 @@ class Dash(App):
         self.login: str | None = None
         self.prs: list[dict] = []
         self.reviews: list[dict] = []
+        self.queued = len(read_queue())  # merges waiting for green CI (see MERGE_QUEUE)
         self.notes_started: dict[str, float] = {}  # note path -> when b/v started writing it
         self.cleanup: list[dict] = []
         self.agents: list[dict] = []
@@ -665,6 +725,7 @@ class Dash(App):
                 self.prs = load_prs(self.login)
                 self.cleanup = load_cleanup(self.login)
             elif what == "reviews":
+                self.run_merge_queue()
                 self.reviews = load_reviews()
             elif what == "agents":
                 self.agents = load_agents()
@@ -829,7 +890,8 @@ class Dash(App):
             names = " + ".join(where + ([", ".join(r.split("/")[-1] for r in REVIEW_REPOS)] if REVIEW_REPOS else []))
             if REVIEW_MAX_AGE:
                 names += f" · last {REVIEW_MAX_AGE // 3600}h"
-            section("REVIEWS", f"{len(self.reviews)} waiting on you · {names}" if "reviews" in self.updated else names)
+            queued = f"{self.queued} to merge when green · " if self.queued else ""
+            section("REVIEWS", f"{len(self.reviews)} waiting on you · {queued}{names}" if "reviews" in self.updated else queued + names)
             if not err_or_wait("reviews"):
                 if not self.reviews:
                     t.append("  nothing waiting on your review\n", DIM)
@@ -1404,9 +1466,11 @@ class Dash(App):
             return self.say("draft PR; not approving it")
         if p["fail"]:
             return self.say("CI is red on this PR; not approving it · o to look")
+        if self.review_state(p) == "outdated":
+            return self.say("the review is for an older commit · v review again first")
         method = (p["method"] or "MERGE").lower()
         self.pending = dict(kind="approve_merge", p=p, method=method,
-                            question=f"Approve {p['repo'].split('/')[-1]}#{p['number']} and merge when green ({method})?")
+                            question=f"Approve {p['repo']}#{p['number']} and merge when green ({method})?")
         self.render_view()
 
     def do_approve_merge(self, p: dict, method: str) -> None:
@@ -1425,21 +1489,53 @@ class Dash(App):
         if live.stdout.strip() != p["head"]:
             self.call_from_thread(self.say, f"#{n} has new commits since dash loaded it; not approving · look again")
             return self.fetch("reviews")
-        pin = ("--match-head-commit", p["head"])  # the merge fails if the head moves after this point
-        r = gh("review", "--approve")
+        # The approval names this commit, so it can't be read as approving commits pushed later.
+        r = subprocess.run(["gh", "api", "-X", "POST", f"repos/{repo}/pulls/{n}/reviews",
+                            "-f", f"commit_id={p['head']}", "-f", "event=APPROVE"], capture_output=True, text=True, timeout=60)
         if r.returncode != 0:
             msg = "approve failed: " + last(r)
+        elif all_green(p):
+            # GitHub checks the head at merge time: if it moved after this point, the merge fails instead.
+            m = gh("merge", f"--{method}", "--match-head-commit", p["head"])
+            msg = f"approved and merged #{n}" if m.returncode == 0 else f"approved #{n}; merge failed: " + last(m)
         else:
-            m = gh("merge", "--auto", f"--{method}", *pin)
-            if m.returncode == 0:
-                msg = f"approved #{n} · merges when green"
-            elif all_green(p):  # repo without auto-merge: checks were green for this exact commit, so merge now
-                m = gh("merge", f"--{method}", *pin)
-                msg = f"approved and merged #{n}" if m.returncode == 0 else f"approved #{n}; merge failed: " + last(m)
-            else:
-                msg = f"approved #{n}; couldn't queue the merge: " + last(m)
+            with _queue_lock:
+                q = [e for e in read_queue() if not (e["repo"] == repo and e["number"] == p["number"])]
+                q.append(dict(repo=repo, number=p["number"], head=p["head"], method=method, at=time.time()))
+                write_queue(q)
+                self.queued = len(q)
+            msg = f"approved #{n} · dash merges it when CI is green on this commit (while dash is running)"
         self.call_from_thread(self.say, msg)
         self.fetch("reviews")
+
+    def run_merge_queue(self) -> None:
+        """Merge queued PRs whose CI went green on the exact commit you approved; drop the rest with a reason."""
+        with _queue_lock:
+            q, keep, msgs = read_queue(), [], []
+            for e in q:
+                try:
+                    action, msg = merge_step(e, load_pr(e["repo"], e["number"]), time.time())
+                    if action == "merge":
+                        method = e["method"] if e["method"] in MERGE_METHODS else "merge"
+                        m = subprocess.run(["gh", "pr", "merge", f"--{method}", "--match-head-commit", e["head"],
+                                            str(e["number"]), "-R", e["repo"]], capture_output=True, text=True, timeout=60)
+                        tag = f"{e['repo'].split('/')[-1]}#{e['number']}"
+                        err = (m.stderr.strip().splitlines() or ["unknown error"])[-1][:70]
+                        msg = f"merged {tag}: CI green on the commit you approved" if m.returncode == 0 else f"couldn't merge {tag}: {err}"
+                    elif action == "wait":
+                        keep.append(e)
+                except (KeyError, TypeError, ValueError):
+                    msg = "merge queue: dropped an unreadable entry"
+                except Exception as ex:  # e.g. a gh timeout: keep it and try again next refresh
+                    keep.append(e)
+                    msg = f"merge queue: {type(ex).__name__}, will retry"
+                if msg:
+                    msgs.append(msg)
+            if len(keep) != len(q):
+                write_queue(keep)
+            self.queued = len(keep)
+        if msgs:
+            self.call_from_thread(self.say, " · ".join(msgs))
 
     def action_confirm(self, yes: bool) -> None:
         if self.typing():  # Esc while typing a note cancels the note

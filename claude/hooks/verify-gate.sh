@@ -40,21 +40,31 @@ while IFS= read -r f; do [ -f "$f" ] && changed+=("$f"); done < <(sort -u "$file
 [ ${#changed[@]} -gt 0 ] || { rm -f "$files"; exit 0; }
 roots=$(for f in "${changed[@]}"; do git -C "$(dirname "$f")" rev-parse --show-toplevel 2>/dev/null; done | sort -u)
 
-# Checks run repo code (go test, a repo's .claude/verify.sh), so only in folders you trust:
-# one path per line in ~/.config/muster/trusted-roots (install.sh adds your code folder; `muster trust <dir>` adds more).
+# Checks run repo code (go test, a repo's .claude/verify.sh), so only in repos you trust:
+# one repo path per line in ~/.config/muster/trusted-roots (`muster trust` inside a repo adds it).
+# Exact repos, not parent folders: a clone or fork checkout dropped into your code folder must not run unasked.
+# A worktree counts as its main repo.
 TRUST="${MUSTER_TRUSTED_ROOTS_FILE:-$HOME/.config/muster/trusted-roots}"
 trusted() {
   [ -f "$TRUST" ] || return 1
-  local line
+  local here main line
+  here=$(cd "$1" && pwd -P)
+  main=$(cd "$1" && cd "$(git rev-parse --git-common-dir)/.." 2>/dev/null && pwd -P)
   while IFS= read -r line; do
     line="${line/#\~/$HOME}"; line="${line%/}"
-    [ -n "$line" ] && [ "${line:0:1}" != "#" ] && { [ "$1" = "$line" ] || [[ "$1" == "$line"/* ]]; } && return 0
+    { [ -n "$line" ] && [ "${line:0:1}" != "#" ]; } || continue
+    line=$(cd "$line" 2>/dev/null && pwd -P) || continue
+    { [ "$here" = "$line" ] || [ "$main" = "$line" ]; } && return 0
   done < "$TRUST"
   return 1
 }
+hinted="$state/$sid.hinted"; skipped=""
 
 for root in $roots; do
-  trusted "$root" || continue  # not a trusted folder: don't run its code
+  if ! trusted "$root"; then  # not a trusted repo: don't run its code; say so once per session
+    grep -qxF "$root" "$hinted" 2>/dev/null || { echo "$root" >> "$hinted"; skipped+="${skipped:+, }${root/#$HOME/~}"; }
+    continue
+  fi
   mine=(); for f in "${changed[@]}"; do [[ "$f" == "$root"/* ]] && mine+=("$f"); done
   if [ -x "$root/.claude/verify.sh" ]; then run "$root" "$root/.claude/verify.sh" "${mine[@]}"; continue; fi
 
@@ -82,4 +92,5 @@ if [ $fail -eq 1 ]; then
   exit 0
 fi
 rm -f "$files" "$blocks"  # verified: start fresh for the next change
+[ -n "$skipped" ] && jq -n --arg m "verify-gate: no checks run in $skipped (not a trusted repo). To check it, run: muster trust <repo>" '{systemMessage: $m}'
 exit 0

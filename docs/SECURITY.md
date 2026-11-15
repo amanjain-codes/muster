@@ -20,7 +20,7 @@ Optional tokens (e.g. `GH_TOKEN`) go in `.env` only.
 | Recap | Haiku | none |
 | Share a PR | Haiku | `slack_send_message` only, and only after you press `y` |
 
-Headless runs are locked down three ways: `--tools ""` (no built-in tools at all: no Bash, no file edits), `--permission-mode dontAsk` (anything not pre-approved is refused, whatever your own permission settings say), and `--allowedTools` (only the tools in the table). Verified: a locked fetch asked to run a shell command had no shell; asked to post to Slack, the call was refused.
+Headless runs are locked down three ways: `--tools ToolSearch` (no Bash, no file edits; ToolSearch only loads tool definitions), `--permission-mode dontAsk` (anything not pre-approved is refused), and `--allowedTools` (only the tools in the table). "Pre-approved" may also include allow rules in your own Claude settings, so keep broad MCP allow rules (for example a whole Slack or Jira server) out of `~/.claude/settings.json`. Verified: a locked fetch asked to run a shell command had no shell; asked to post to Slack, the call was refused.
 
 ## Untrusted input
 
@@ -47,7 +47,8 @@ Caches (`~/.cache/muster/`): calendar titles and times, Jira keys/titles/statuse
 
 ## Gates
 
-- **Verify gate** runs build/tests, which is the repo's own code, so it runs only in folders listed in `~/.config/muster/trusted-roots` (the installer adds your code folder; `muster trust <dir>` adds more). In any other folder it does nothing. Capped at 3 rounds, can't loop.
+- **Verify gate** runs build/tests, which is the repo's own code, so it runs only in repos listed in `~/.config/muster/trusted-roots` (`muster trust` inside a repo adds it; the list starts empty). Exact repos, not parent folders: a clone or fork checkout dropped into your code folder never runs unasked. A worktree counts as its main repo. Anywhere else it runs nothing and says so once per session. Capped at 3 rounds, can't loop. Trusting a repo trusts whatever branch is checked out in it, including someone else's PR.
+- **`A` (approve + merge)** approves the exact commit dash showed (the review names that commit) and is refused when your Claude review is for an older commit. With CI green it merges at once with `--match-head-commit`, which GitHub checks at merge time. With CI still running, dash keeps the merge itself (`~/.cache/muster/merge-queue.json`) instead of GitHub auto-merge, which stays on when someone with write access pushes: it merges only when CI is green on that same commit, and drops the merge if new commits arrive or CI goes red.
 - **Review gate** blocks an agent's `git push` until that exact commit is marked reviewed. It parses commands the way a shell does (chains, `cd`, `git -c/-C`, path-qualified git, `env`/`command` wrappers, `sh -c`, `eval`) and only exempts delete-only or tags-only pushes. If its parser goes missing it **blocks** pushes rather than allowing them. It never touches pushes you run yourself.
 - **What the gates are not**: guardrails so checks and reviews aren't forgotten, not a sandbox against a deliberately misbehaving agent. An agent with shell access could write the review marker itself; the agent's own permission settings are the real boundary.
 

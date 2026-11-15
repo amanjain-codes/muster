@@ -30,7 +30,7 @@ The Claude status line shows these as `⌥d dash  ⌥e ide  ⌥n fresh`, plus th
 | `s` | PULL REQUESTS | post the PR to your team channel (after `y/n`; needs `slack.share_channel_id`) |
 | `M` | PULL REQUESTS | merge when green, your PRs only (after `y/n`) |
 | `v` | REVIEWS | Claude reviews the PR (verdict, summary, risky spots; ~25 s), then `v` again to read it |
-| `A` | REVIEWS | approve and merge when green (after `y/n`; refused for drafts and red CI) |
+| `A` | REVIEWS | approve this exact commit and merge when green (after `y/n`; refused for drafts, red CI and a Claude review of an older commit). If CI is still running, dash merges it later, while dash is running, and only if no new commits arrived |
 | `c` / `F` | CLEAN UP | remove a merged PR's worktree; `F` first stashes uncommitted changes |
 | `g` `x` `X` | AGENTS | go to the agent; send `/compact`; close it (after `y/n`, resumable) |
 | `w` / `v` | RECAP | write today's recap / view it |

@@ -198,9 +198,9 @@ EOF
 fi
 TR="$CDIR/trusted-roots"
 if [ ! -e "$TR" ] && [ $DRY -eq 0 ]; then
-  root_dir=$(python3 -c "import sys; sys.path.insert(0, '$REPO/plugin'); from dashconf import load; print(load()['workspace']['code_root'])" 2>/dev/null || echo "$HOME/Projects")
-  printf '# Folders where the verify gate may run build/tests (one per line). Add more: muster trust <dir>\n%s\n' "$root_dir" > "$TR"
-  ok "verify gate trusts ${root_dir/#$HOME/~} (muster trust <dir> to add more)"; record "file $TR"
+  # Starts empty on purpose: trusting a whole code folder would run any repo cloned into it.
+  printf '# Repos where the verify gate may run build/tests (one per line). Add one: cd <repo> && muster trust\n' > "$TR"
+  ok "verify gate trusts no repo yet: run 'muster trust' inside each repo you want checked"; record "file $TR"
 fi
 if [ -e "$CDIR/.env" ]; then ok ".env exists: kept"
 else run "cp '$REPO/config/.env.example' '$CDIR/.env' && chmod 600 '$CDIR/.env'"; ok ".env created (private, mode 600)"; record "file $CDIR/.env"; fi

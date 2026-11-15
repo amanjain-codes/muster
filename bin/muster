@@ -21,7 +21,9 @@ case "${1:-help}" in
   version|-v|--version) echo "muster $(cat "$REPO/VERSION") ($(git -C "$REPO" rev-parse --short HEAD 2>/dev/null || echo local))" ;;
   config)    exec "${EDITOR:-open}" "$HOME/.config/muster/config.toml" ;;
   trust)
-    shift; d="$(cd "${1:-.}" && pwd)"; f="$HOME/.config/muster/trusted-roots"; mkdir -p "$(dirname "$f")"
+    # Repos only, never a parent folder: anything cloned into a trusted folder would run unasked.
+    shift; d="$(cd "${1:-.}" && git rev-parse --show-toplevel 2>/dev/null)" || { echo "not a git repo: ${1:-.} (trust repos one at a time)"; exit 1; }
+    f="${MUSTER_TRUSTED_ROOTS_FILE:-$HOME/.config/muster/trusted-roots}"; mkdir -p "$(dirname "$f")"
     grep -qxF "$d" "$f" 2>/dev/null && echo "already trusted: $d" || { echo "$d" >> "$f"; echo "trusted: $d (the verify gate will run its build/tests)"; } ;;
   help|-h|--help|*)
     cat <<EOF
@@ -30,7 +32,7 @@ muster $(cat "$REPO/VERSION"): the agentic terminal
   muster doctor [--quick]   check every part, with a fix for anything broken
   muster update             pull the latest version and re-install (safe, idempotent)
   muster config             open your settings (~/.config/muster/config.toml)
-  muster trust [dir]        let the verify gate run build/tests in this folder (default: current)
+  muster trust [repo]       let the verify gate run this repo's build/tests (default: the repo you're in)
   muster install [flags]    run the installer (--with-theme, --dry-run, ...)
   muster uninstall [--purge] undo the install and restore your configs
   muster test               run the test suite

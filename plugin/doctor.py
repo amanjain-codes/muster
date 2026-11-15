@@ -146,6 +146,21 @@ def tools(quick: bool) -> None:
     check("CI autopilot", not bad, "no recent errors" if not bad else "errors in autopilot.log", f"tail -40 {log}")
 
 
+def trust() -> None:
+    # Since 0.3.2 the verify gate trusts exact repos only. An older folder entry (e.g. ~/Projects) now matches
+    # nothing, so the gate would quietly stop checking the repos inside it: say so.
+    path = HOME / ".config" / "muster" / "trusted-roots"
+    try:
+        lines = [l.strip() for l in path.read_text().splitlines()]
+    except OSError:
+        lines = []
+    entries = [l for l in lines if l and not l.startswith("#")]
+    folders = [e for e in entries if not (Path(os.path.expanduser(e)) / ".git").exists()]
+    check("verify gate trust", not folders,
+          f"{len(entries)} repo(s)" if not folders else f"not a repo: {', '.join(folders)[:50]}",
+          f"Repos only now. Run 'muster trust' inside each repo you want checked, then remove the folder lines from {path}")
+
+
 MANIFEST = HOME / ".local" / "share" / "muster" / "install-manifest.txt"  # written by install.sh, removed by uninstall
 
 
@@ -160,7 +175,7 @@ def main() -> int:
         else:
             print(f" \033[31m✗\033[0m Muster isn't installed on this machine.\n   \033[33m→ Run {fix}\033[0m")
         return 1
-    hooks(); herdr(); commands(); statusline(); fetcher(); tools(quick)
+    hooks(); trust(); herdr(); commands(); statusline(); fetcher(); tools(quick)
     if "--json" in sys.argv:
         print(json.dumps(results))
     else:

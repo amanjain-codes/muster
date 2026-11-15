@@ -80,7 +80,7 @@ async def main():
         expect("review hints: the three actions", app.items[app.sel]["hints"], "v read review · A approve + merge · o open")
         await pilot.press("A")
         expect("A asks before approving", (app.pending or {}).get("kind"), "approve_merge")
-        expect("question names PR and method", (app.pending or {}).get("question"), "Approve svc#7 and merge when green (squash)?")
+        expect("question names owner/repo, PR and method", (app.pending or {}).get("question"), "Approve acme/svc#7 and merge when green (squash)?")
         await pilot.press("n")
         expect("n cancels", app.pending, None)
 
@@ -143,6 +143,68 @@ async def main():
         expect("a running brief shows as writing", app.note_state(dash.brief_path("ABC-2")), "writing")
         dash.brief_path("ABC-2").write_text(dash.FAILED + " boom\n")
         expect("a failed brief shows as failed", app.note_state(dash.brief_path("ABC-2")), "failed")
+
+        # --- A: approve only what you reviewed, and never hand the merge to GitHub's auto-merge ---
+        dash.review_path("acme/svc", 10).write_text("# acme/svc#10: review\n\n_model · $0.08 · head 9999999" + "0" * 33 + "_\n")
+        app.reviews = [pr(10)]
+        app.render_view()
+        select("review", lambda it: it["p"]["number"] == 10)
+        await pilot.press("A")
+        expect("outdated review: A refused", (app.pending, app.flash), (None, "the review is for an older commit · v review again first"))
+
+        head = "abc1234" + "0" * 33
+        calls: list[list[str]] = []
+
+        def fake_run(cmd, **kw):
+            calls.append(cmd)
+            out = head + "\n" if cmd[:3] == ["gh", "pr", "view"] else ""
+            return dash.subprocess.CompletedProcess(cmd, 0, out, "")
+
+        real_run, dash.subprocess.run = dash.subprocess.run, fake_run
+        try:
+            await asyncio.to_thread(app.do_approve_merge, pr(7), "squash")
+            await pilot.pause()
+            approve = next((c for c in calls if c[:2] == ["gh", "api"]), [])
+            expect("approve is pinned to the commit dash showed",
+                   ("repos/acme/svc/pulls/7/reviews" in approve, f"commit_id={head}" in approve, "event=APPROVE" in approve), (True, True, True))
+            merge = next((c for c in calls if c[:3] == ["gh", "pr", "merge"]), [])
+            pinned = "--match-head-commit" in merge and merge[merge.index("--match-head-commit") + 1] == head
+            expect("green: merges now, pinned to that commit", (pinned, "--squash" in merge), (True, True))
+            expect("never uses GitHub auto-merge", any("--auto" in c for c in calls), False)
+            expect("green: nothing queued", dash.read_queue(), [])
+
+            calls.clear()
+            await asyncio.to_thread(app.do_approve_merge, pr(11, ok=1, total=3, head=head), "squash")
+            await pilot.pause()
+            expect("CI running: approves, does not merge", ([c[:2] for c in calls if c[:2] == ["gh", "api"]], any(c[:3] == ["gh", "pr", "merge"] for c in calls)),
+                   ([["gh", "api"]], False))
+            q = dash.read_queue()
+            expect("CI running: dash queues the merge for that commit", [(e["repo"], e["number"], e["head"], e["method"]) for e in q],
+                   [("acme/svc", 11, head, "squash")])
+            expect("queue file is private", oct(dash.MERGE_QUEUE.stat().st_mode & 0o777), "0o600")
+            app.render_view()
+            expect("REVIEWS header shows the queued merge", "1 to merge when green" in app.screen_text, True)
+        finally:
+            dash.subprocess.run = real_run
+
+        e = dict(repo="acme/svc", number=11, head=head, method="squash", at=t0)
+        n = lambda **kw: {**node(11, headRefOid=head), **kw}  # noqa: E731
+        green = {"nodes": [{"commit": {"statusCheckRollup": {"state": "SUCCESS", "contexts": {"nodes": [
+            {"__typename": "CheckRun", "name": "build", "status": "COMPLETED", "conclusion": "SUCCESS"}]}}}}]}
+        red = {"nodes": [{"commit": {"statusCheckRollup": {"state": "FAILURE", "contexts": {"nodes": [
+            {"__typename": "CheckRun", "name": "e2e", "status": "COMPLETED", "conclusion": "FAILURE"}]}}}}]}
+        running = {"nodes": [{"commit": {"statusCheckRollup": {"state": "PENDING", "contexts": {"nodes": [
+            {"__typename": "CheckRun", "name": "build", "status": "IN_PROGRESS", "conclusion": None}]}}}}]}
+        step = lambda node_, now=t0 + 60: dash.merge_step(e, node_, now)[0]  # noqa: E731
+        expect("queue: green on the same commit merges", step(n(commits=green)), "merge")
+        expect("queue: still running waits", step(n(commits=running)), "wait")
+        expect("queue: new commits after approval: dropped, not merged", step(n(commits=green, headRefOid="f" * 40)), "drop")
+        expect("queue: red CI dropped", step(n(commits=red)), "drop")
+        expect("queue: merged or closed elsewhere dropped", step(n(state="MERGED")), "drop")
+        expect("queue: PR not readable right now waits", step(None), "wait")
+        expect("queue: gives up after 3 days", step(n(commits=running), t0 + 4 * 86400), "drop")
+        expect("queue: no checks yet waits", step(n(), t0 + 60), "wait")
+        expect("queue: still no checks after 10 min: repo has no CI, merges", step(n(), t0 + 11 * 60), "merge")
 
 
 asyncio.run(main())

@@ -2,6 +2,13 @@
 
 All notable changes to Muster. Versions follow [semantic versioning](https://semver.org): breaking changes bump the major, features the minor, fixes the patch.
 
+## 0.3.2 (2026-11-15)
+
+Security fixes from a full review of 0.3.1:
+- **Verify gate trusts exact repos, not folders.** A clone or fork checkout dropped into a trusted code folder used to have its `verify.sh` and tests run when an agent stopped. Now only repos you `muster trust` (from inside the repo) run; worktrees count as their main repo. The installer no longer trusts your code folder, the gate says once per session when it skipped a repo, and `muster doctor` flags old folder entries. **Upgrading:** run `muster trust` inside each repo you want checked, then remove the folder lines from `~/.config/muster/trusted-roots`.
+- **`A` no longer uses GitHub auto-merge**, which stays on when someone with write access pushes, so an unseen commit could merge under your approval. The approval now names the exact commit; with CI green dash merges at once with `--match-head-commit`; with CI running dash queues the merge and does it only when CI is green on that same commit, dropping it on new commits, red CI or after 3 days. `A` is refused when your Claude review is for an older commit, and its question shows the PR's owner.
+- `docs/SECURITY.md` matches the code (`--tools ToolSearch`) and warns about broad MCP allow rules.
+
 ## 0.3.1 (2026-11-15)
 
 - `install.sh --dry-run` changes nothing (it created `~/.local/share/muster`) and no longer crashes on a machine without `~/.claude/settings.json` or a herdr config.
