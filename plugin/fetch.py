@@ -70,8 +70,8 @@ def prompt(with_slack: bool = True) -> str:
     return f"""You are a data fetcher for a terminal dashboard. Now is {now.isoformat(timespec='minutes')} ({now.strftime('%A')}).
 Use only the tools you have. Do not ask questions. Reply with ONE JSON object and nothing else, no prose, no code fence.
 
-1. "today": all my meetings today, including ones already over, earliest first, at most 15. Call list_events on the primary calendar with a time range from 00:00 until 23:59 today, and read the event rows it returns. A response with only calendar metadata (summary, timeZone, accessRole) and no events means the day is empty: return [] and do not list it in errors. Only events I organized or accepted. Skip all-day events, events I declined or haven't answered, and events with no other attendees.
-   Each: {{"start": "HH:MM" 24h local, "end": "HH:MM" 24h local, "title": short title of at most 28 characters (drop prefixes like "Sync:" and filler words), "url": event html link or null}}.
+1. "today": all my meetings today, including ones already over, earliest first, at most 15. Call list_events on the primary calendar with a time range from 00:00 until 23:59 today, and read the event rows it returns. A response with only calendar metadata (summary, timeZone, accessRole) and no events means the day is empty: return [] and do not list it in errors. Skip all-day events, cancelled events and events I declined (my own attendee responseStatus is "declined"). Keep everything else, including events I haven't answered yet and my own blocks with no other attendees.
+   Each: {{"start": "HH:MM" 24h local, "end": "HH:MM" 24h local, "title": short title of at most 28 characters that tells it apart from similar events the same day (drop prefixes like "Sync:" and filler words; for a title like "15-Minutes Screening Round - Engineering - Jane Roe - Role" write "Screening: Jane Roe"), "rsvp": "unanswered" if my own attendee responseStatus is "needsAction", else "accepted", "url": event html link or null}}.
 2. "jira": Jira issues with JQL `{CFG['jira']['jql']}`, at most 6. Get the cloudId first with getAccessibleAtlassianResources.
    Each: {{"key": str, "title": short summary of at most 36 characters (drop bracketed tags like "[TEAM]"), "status": str (exactly as Jira shows it), "url": "https://<site>/browse/<key>"}}.
 {slack_part(now) if with_slack else ""}{team_part(now, 4) if with_slack and REVIEW_CHANNEL else ""}{3 + with_slack + bool(with_slack and REVIEW_CHANNEL)}. "errors": a list of short strings, one per part above that failed, else [].
@@ -133,7 +133,7 @@ def sanitize_jira(items: object) -> list[dict]:
 
 
 def sanitize_today(items: object) -> list[dict]:
-    """Meetings: HH:MM start and end (or null), short title, and a Google Calendar link or none."""
+    """Meetings: HH:MM start and end (or null), short title, rsvp (unanswered or accepted), a Google Calendar link or none."""
     hhmm = re.compile(r"^\d{2}:\d{2}$")
     out = []
     for m in items if isinstance(items, list) else []:
@@ -141,6 +141,7 @@ def sanitize_today(items: object) -> list[dict]:
             continue
         url, end = str(m.get("url") or ""), str(m.get("end") or "")
         out.append({"start": m["start"], "end": end if hhmm.match(end) else None, "title": clean(m.get("title"), 30),
+                    "rsvp": "unanswered" if m.get("rsvp") == "unanswered" else "accepted",
                     "url": url if CAL_URL.match(url) else None})
     return out[:15]
 

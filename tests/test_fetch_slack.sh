@@ -55,6 +55,11 @@ expect("today: the whole day, up to 15 meetings", (len(m), m[0]["start"]), (15, 
 expect("today: end time kept", m[0]["end"], "06:30")
 expect("today: bad end time becomes null", sanitize_today([{"start": "09:00", "end": "later", "title": "x"}])[0]["end"], None)
 expect("prompt asks for the whole day, not just what's left", ("00:00" in prompt(False), "rest of today" in prompt(False)), (True, False))
+expect("prompt drops only declined and all-day, keeps unanswered and solo blocks",
+       ("declined" in prompt(False), "Only events I organized or accepted" in prompt(False), "Skip all-day events, events I declined or" in prompt(False)), (True, False, False))
+m = sanitize_today([{"start": "10:00", "title": "a", "rsvp": "unanswered"}, {"start": "11:00", "title": "b", "rsvp": "accepted"},
+                    {"start": "12:00", "title": "c"}, {"start": "13:00", "title": "d", "rsvp": "<script>"}])
+expect("today: unanswered kept, everything else counts as accepted", [x["rsvp"] for x in m], ["unanswered", "accepted", "accepted", "accepted"])
 expect("prompt without Slack has no Slack part", ("slack_search" in prompt(False), '3. "errors"' in prompt(False)), (False, True))
 expect("prompt with Slack uses a 24h unix cutoff", ('after="' in prompt(True), '4. "errors"' in prompt(True)), (True, True))
 import fetch

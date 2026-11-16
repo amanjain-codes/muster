@@ -2,6 +2,10 @@
 
 All notable changes to Muster. Versions follow [semantic versioning](https://semver.org): breaking changes bump the major, features the minor, fixes the patch.
 
+## 0.4.1 (2026-11-16)
+
+- **TODAY no longer hides meetings you haven't accepted.** 0.4.0 still dropped unanswered invites and events with no other attendees, so a day with 11 events showed 2. Now only declined, cancelled and all-day events are left out; unanswered invites show `? no reply`. Titles are shortened so similar events stay distinguishable (several "15-Minutes Screening Round - ..." entries now read `Screening: <name>`).
+
 ## 0.4.0 (2026-11-16)
 
 - **TODAY shows the whole day**, not just the next 4 meetings: every meeting you organized or accepted (up to 15), finished ones dimmed with `✓`, the current one marked `▸ now, till HH:MM`, and "N meetings · M left" in the header. The fetch now also reads each meeting's end time.

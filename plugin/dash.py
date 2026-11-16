@@ -872,6 +872,8 @@ class Dash(App):
                     text = Text(f"▸ {start}  ", f"bold {GREEN}") + Text(m.get("title", "")[:28], "bold") + Text(f"  now, till {end}", GREEN)
                 else:
                     text = Text(f"  {start}  ", ORANGE) + Text(m.get("title", "")[:28])
+                if m.get("rsvp") == "unanswered":  # an invite you haven't replied to
+                    text.append("  ? no reply", YELLOW)
                 row(dict(sec="TODAY", kind="meeting", url=m.get("url"), m=m), text, "o open · C prep with Claude")
         section("JIRA", "assigned to me, not done")
         if c is None:

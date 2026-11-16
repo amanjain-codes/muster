@@ -211,13 +211,15 @@ async def main():
         app.comms = {**app.comms, "today": [
             {"start": hm(-7200), "end": hm(-5400), "title": "done one", "url": None},
             {"start": hm(-600), "end": hm(1200), "title": "in progress", "url": None},
-            {"start": hm(3600), "end": hm(5400), "title": "later one", "url": None}]}
-        if hm(-7200) < hm(5400):  # skip near midnight, when the times wrap
+            {"start": hm(3600), "end": hm(5400), "title": "later one", "url": None},
+            {"start": hm(7200), "end": hm(9000), "title": "unanswered one", "url": None, "rsvp": "unanswered"}]}
+        if hm(-7200) < hm(9000):  # skip near midnight, when the times wrap
             app.render_view()
             s = app.screen_text
             row_of = lambda title: next(l for l in s.splitlines() if title in l)  # noqa: E731
             expect("TODAY lists past, current and later meetings", all(x in s for x in ("done one", "in progress", "later one")), True)
-            expect("TODAY note counts them", "3 meetings · 2 left" in s, True)
+            expect("TODAY note counts them", "4 meetings · 3 left" in s, True)
+            expect("unanswered invite is marked ?", ("?" in row_of("unanswered one"), "?" in row_of("later one")), (True, False))
             expect("past meeting marked done", "✓" in row_of("done one"), True)
             expect("current meeting marked now", "now" in row_of("in progress"), True)
             expect("later meeting unmarked", ("✓" in row_of("later one"), "now" in row_of("later one")), (False, False))
