@@ -851,18 +851,28 @@ class Dash(App):
                 stale, stale_style = f"stale · {stale} · last fetch failed: {c.get('last_error', '')[:40]}", ORANGE
         if fetching():
             stale += " · fetching…"
-        section("TODAY", stale, stale_style)
+        meetings = (c or {}).get("today") or []
+        hhmm = dt.datetime.now().strftime("%H:%M")  # same-day HH:MM strings compare correctly as text
+        left = [m for m in meetings if (m.get("end") or m.get("start", "")) > hhmm]
+        count = f"{len(meetings)} meeting{'s' * (len(meetings) != 1)} · {len(left)} left · " if meetings else ""
+        section("TODAY", count + stale, stale_style)
         fetch_errors = " ".join(c.get("errors") or []).lower() if c else ""
         if c is None:
             t.append("  fetching for the first time, about 40s…\n" if fetching() else "  no data yet · press r\n", DIM)
         else:
             if "today" in fetch_errors or "calendar" in fetch_errors:
                 t.append("  couldn't read Calendar on the last fetch · r to retry\n", ORANGE)
-            elif not c.get("today"):
-                t.append("  no more meetings today\n", DIM)
-            for m in c.get("today", [])[:4]:
-                row(dict(sec="TODAY", kind="meeting", url=m.get("url"), m=m),
-                    Text(f"{m.get('start', '')}  ", ORANGE) + Text(m.get("title", "")[:28]), "o open · C prep with Claude")
+            elif not meetings:
+                t.append("  no meetings today\n", DIM)
+            for m in meetings:
+                start, end = m.get("start", ""), m.get("end") or m.get("start", "")
+                if end <= hhmm:  # over: dimmed, still there to look back at
+                    text = Text(f"✓ {start}  ", DIM) + Text(m.get("title", "")[:28], DIM)
+                elif start <= hhmm:  # happening now
+                    text = Text(f"▸ {start}  ", f"bold {GREEN}") + Text(m.get("title", "")[:28], "bold") + Text(f"  now, till {end}", GREEN)
+                else:
+                    text = Text(f"  {start}  ", ORANGE) + Text(m.get("title", "")[:28])
+                row(dict(sec="TODAY", kind="meeting", url=m.get("url"), m=m), text, "o open · C prep with Claude")
         section("JIRA", "assigned to me, not done")
         if c is None:
             t.append("  waiting for the first fetch\n", DIM)

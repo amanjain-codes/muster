@@ -2,6 +2,10 @@
 
 All notable changes to Muster. Versions follow [semantic versioning](https://semver.org): breaking changes bump the major, features the minor, fixes the patch.
 
+## 0.4.0 (2026-11-16)
+
+- **TODAY shows the whole day**, not just the next 4 meetings: every meeting you organized or accepted (up to 15), finished ones dimmed with `✓`, the current one marked `▸ now, till HH:MM`, and "N meetings · M left" in the header. The fetch now also reads each meeting's end time.
+
 ## 0.3.2 (2026-11-15)
 
 Security fixes from a full review of 0.3.1:

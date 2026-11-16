@@ -49,6 +49,12 @@ m = sanitize_today([
 expect("today: Google Calendar link kept", m[0]["url"], "https://www.google.com/calendar/event?eid=abc")
 expect("today: other links dropped", m[1]["url"], None)
 expect("today: bad start time dropped", len(m), 2)
+m = sanitize_today([{"start": f"{h:02d}:00", "end": f"{h:02d}:30", "title": f"m{h}"} for h in range(6, 23)]
+                   + [{"start": "09:00", "end": "later", "title": "bad end"}])
+expect("today: the whole day, up to 15 meetings", (len(m), m[0]["start"]), (15, "06:00"))
+expect("today: end time kept", m[0]["end"], "06:30")
+expect("today: bad end time becomes null", sanitize_today([{"start": "09:00", "end": "later", "title": "x"}])[0]["end"], None)
+expect("prompt asks for the whole day, not just what's left", ("00:00" in prompt(False), "rest of today" in prompt(False)), (True, False))
 expect("prompt without Slack has no Slack part", ("slack_search" in prompt(False), '3. "errors"' in prompt(False)), (False, True))
 expect("prompt with Slack uses a 24h unix cutoff", ('after="' in prompt(True), '4. "errors"' in prompt(True)), (True, True))
 import fetch

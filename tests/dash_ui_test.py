@@ -206,6 +206,25 @@ async def main():
         expect("queue: no checks yet waits", step(n(), t0 + 60), "wait")
         expect("queue: still no checks after 10 min: repo has no CI, merges", step(n(), t0 + 11 * 60), "merge")
 
+        # --- TODAY: every meeting of the day; past ones dimmed, the current one marked ---
+        hm = lambda off: time.strftime("%H:%M", time.localtime(now + off))  # noqa: E731
+        app.comms = {**app.comms, "today": [
+            {"start": hm(-7200), "end": hm(-5400), "title": "done one", "url": None},
+            {"start": hm(-600), "end": hm(1200), "title": "in progress", "url": None},
+            {"start": hm(3600), "end": hm(5400), "title": "later one", "url": None}]}
+        if hm(-7200) < hm(5400):  # skip near midnight, when the times wrap
+            app.render_view()
+            s = app.screen_text
+            row_of = lambda title: next(l for l in s.splitlines() if title in l)  # noqa: E731
+            expect("TODAY lists past, current and later meetings", all(x in s for x in ("done one", "in progress", "later one")), True)
+            expect("TODAY note counts them", "3 meetings · 2 left" in s, True)
+            expect("past meeting marked done", "✓" in row_of("done one"), True)
+            expect("current meeting marked now", "now" in row_of("in progress"), True)
+            expect("later meeting unmarked", ("✓" in row_of("later one"), "now" in row_of("later one")), (False, False))
+        app.comms = {**app.comms, "today": []}
+        app.render_view()
+        expect("empty day says so", "no meetings today" in app.screen_text, True)
+
         # --- an agent waiting on you (herdr "blocked": a permission prompt or question) is not idle ---
         def agent(pane, status, active, label):
             return dict(pane=pane, tab="t", ws_id="w", ws=f"ws{pane[1:]}", cwd=f"/code/{pane}", label=label, status=status,

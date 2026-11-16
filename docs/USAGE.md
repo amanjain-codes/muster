@@ -40,7 +40,7 @@ Every action that changes something asks `y/n` first and refuses when it's unsaf
 ## Sections
 
 - **TODO**: notes in `~/.config/muster/todo.md` (plain markdown, edit it anywhere; shared by every dash).
-- **TODAY / JIRA**: from your claude.ai connectors, fetched in the background (see SPECS.md for timing and cost).
+- **TODAY / JIRA**: from your claude.ai connectors, fetched in the background (see SPECS.md for timing and cost). TODAY lists every meeting of the day you organized or accepted (up to 15): finished ones dimmed with `✓`, the current one marked `▸ now, till HH:MM`, and the header counts how many are left.
 - **PULL REQUESTS**: your open PRs in `github.orgs`, with CI state.
 - **REVIEWS**: open PRs posted in `slack.review_channel_id` (any repo in `github.orgs`, marked `#`) plus PRs in `github.review_repos` that ask for your review (marked `→`), oldest first. Merged, closed, your own and ones you've approved are hidden; `review_max_age_hours` keeps only recent ones. Hidden when neither is set.
 - **CLEAN UP**: shows only when a worktree's PR has merged.
